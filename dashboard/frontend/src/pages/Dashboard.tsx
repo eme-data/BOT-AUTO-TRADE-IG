@@ -30,7 +30,7 @@ export default function Dashboard() {
   const apiFetch = useApiFetch()
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
-  const [pnlData, setPnlData] = useState<{ time: string; value: number }[]>([])
+  const [pnlData, _setPnlData] = useState<{ time: string; value: number }[]>([])
 
   const handleMessage = useCallback((data: { type: string; [key: string]: unknown }) => {
     if (data.type === 'tick') {

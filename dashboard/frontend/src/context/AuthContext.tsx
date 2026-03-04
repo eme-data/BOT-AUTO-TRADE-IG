@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 
 interface AuthContextType {
   token: string | null
@@ -30,20 +30,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // server not ready
     }
   }
-
-  const apiFetch = useCallback(
-    async (url: string, options: RequestInit = {}) => {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(options.headers as Record<string, string>),
-      }
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-      }
-      return fetch(url, { ...options, headers })
-    },
-    [token]
-  )
 
   const login = async (username: string, password: string) => {
     const body = new URLSearchParams({ username, password })
