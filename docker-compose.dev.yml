@@ -1,0 +1,20 @@
+services:
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    volumes:
+      - ./bot:/app/bot:ro
+    environment:
+      BOT_LOG_LEVEL: DEBUG
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    volumes:
+      - ./dashboard/api:/app/dashboard/api:ro
+    command: uvicorn dashboard.api.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      BOT_LOG_LEVEL: DEBUG

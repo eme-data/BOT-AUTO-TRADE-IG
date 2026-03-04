@@ -1,0 +1,16 @@
+[project]
+name = "bot-auto-trade-ig"
+version = "0.1.0"
+description = "Automated trading bot for IG Markets with multi-strategy support and web dashboard"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
