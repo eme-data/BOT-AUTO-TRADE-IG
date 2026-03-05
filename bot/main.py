@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sys
 import time
 from collections import deque
@@ -53,7 +54,7 @@ def configure_logging() -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(structlog, settings.bot.log_level, structlog.INFO)
+            getattr(logging, settings.bot.log_level, logging.INFO)
         ),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
