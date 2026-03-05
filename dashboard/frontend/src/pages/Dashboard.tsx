@@ -14,6 +14,12 @@ interface AutoPilotStatus {
   scores: { epic: string; instrument_name: string; total_score: number; is_active: boolean; selected_strategy: string | null }[]
 }
 
+interface ActivityEntry {
+  time: string
+  level: string
+  message: string
+}
+
 interface Metrics {
   daily_pnl: number
   total_pnl: number
@@ -58,6 +64,7 @@ export default function Dashboard() {
   const [positions, setPositions] = useState<Position[]>([])
   const [pnlHistory, setPnlHistory] = useState<PnLPoint[]>([])
   const [autopilot, setAutopilot] = useState<AutoPilotStatus | null>(null)
+  const [activity, setActivity] = useState<ActivityEntry[]>([])
 
   const handleMessage = useCallback((data: { type: string; [key: string]: unknown }) => {
     if (data.type === 'tick') {
@@ -114,16 +121,27 @@ export default function Dashboard() {
     }
   }
 
+  const fetchActivity = async () => {
+    try {
+      const res = await apiFetch('/api/autopilot/activity')
+      if (res.ok) setActivity(await res.json())
+    } catch {
+      // silent
+    }
+  }
+
   useEffect(() => {
     fetchMetrics()
     fetchAccount()
     fetchPositions()
     fetchPnlHistory()
     fetchAutopilot()
+    fetchActivity()
     const interval = setInterval(() => {
       fetchMetrics()
       fetchPositions()
       fetchAutopilot()
+      fetchActivity()
     }, 10000)
     // Refresh account balance every 60s (IG rate limits)
     const accountInterval = setInterval(fetchAccount, 60000)
@@ -197,6 +215,31 @@ export default function Dashboard() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Pilot Activity Feed */}
+      {activity.length > 0 && (
+        <div className="bg-bg-card rounded-lg border border-gray-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Auto-Pilot Activity</h3>
+            <NavLink to="/autopilot" className="text-xs text-blue-400 hover:text-blue-300">Configure</NavLink>
+          </div>
+          <div className="space-y-1 max-h-48 overflow-y-auto text-xs font-mono">
+            {activity.slice(0, 15).map((entry, i) => {
+              const levelColor = entry.level === 'ERROR' ? 'text-loss'
+                : entry.level === 'WARN' ? 'text-yellow-400'
+                : 'text-gray-400'
+              const time = new Date(entry.time).toLocaleTimeString()
+              return (
+                <div key={i} className="flex gap-2 py-0.5">
+                  <span className="text-gray-600 shrink-0">{time}</span>
+                  <span className={`shrink-0 w-10 ${levelColor}`}>{entry.level}</span>
+                  <span className="text-gray-300">{entry.message}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

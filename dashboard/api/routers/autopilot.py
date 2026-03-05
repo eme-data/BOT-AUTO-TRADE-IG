@@ -161,3 +161,19 @@ async def update_autopilot_config(
     await r.publish("bot:commands", json.dumps({"command": "reload_settings"}))
 
     return {"message": "Configuration updated", "updated_fields": list(updates.keys())}
+
+
+@router.get("/activity")
+async def get_autopilot_activity(
+    _user: AdminUser = Depends(get_current_user),
+):
+    """Get recent autopilot activity log entries from Redis."""
+    r = await get_redis()
+    raw_entries = await r.lrange("autopilot:activity", 0, 29)  # last 30
+    entries = []
+    for raw in raw_entries:
+        try:
+            entries.append(json.loads(raw))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return entries

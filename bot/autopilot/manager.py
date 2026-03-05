@@ -40,6 +40,7 @@ class AutoPilotManager:
 
         logger.info("autopilot_scan_start")
         await self._set_status("scanning")
+        await self._log_activity("INFO", "Scan cycle started")
 
         try:
             # 1. Get candidate markets
@@ -48,8 +49,11 @@ class AutoPilotManager:
 
             if not candidates:
                 logger.info("autopilot_no_candidates")
+                await self._log_activity("WARN", "No candidate markets found")
                 await self._set_status("idle")
                 return
+
+            await self._log_activity("INFO", f"Found {len(candidates)} candidate markets")
 
             # 2. Score each market (respecting API budget)
             api_budget = self.config.api_budget_per_cycle
@@ -57,14 +61,23 @@ class AutoPilotManager:
 
             for market in candidates:
                 if api_budget < 3:
+                    await self._log_activity("WARN", "API budget exhausted, stopping scoring")
                     break
                 score = await self.scorer.score_market(market.epic, market.instrument_name)
                 scores.append(score)
                 api_budget -= 3
+                await self._log_activity(
+                    "INFO",
+                    f"Scored {market.instrument_name or market.epic}: {score.total_score:.0%} ({score.regime})",
+                    epic=market.epic,
+                    score=round(score.total_score, 3),
+                    regime=score.regime,
+                )
 
             # 3. Rank by total score, filter by threshold
             scores.sort(key=lambda s: s.total_score, reverse=True)
             qualified = [s for s in scores if s.total_score >= self.config.min_score_threshold]
+            await self._log_activity("INFO", f"Scored {len(scores)} markets, {len(qualified)} above threshold ({self.config.min_score_threshold:.0%})")
 
             # 4. Select top N markets (respecting max_active_markets)
             current_open = len(self._active_strategies)
@@ -100,9 +113,11 @@ class AutoPilotManager:
                 qualified=len(qualified),
                 active=len(self._active_strategies),
             )
+            await self._log_activity("INFO", f"Scan complete: {len(self._active_strategies)} active strategies")
 
         except Exception as e:
             logger.error("autopilot_scan_error", error=str(e))
+            await self._log_activity("ERROR", f"Scan error: {e}")
             await self._set_status("error")
 
     async def _activate_market(self, score: MarketScore) -> None:
@@ -129,6 +144,11 @@ class AutoPilotManager:
             score=score.total_score,
             regime=score.regime,
         )
+        await self._log_activity(
+            "INFO",
+            f"Activated {score.instrument_name or score.epic} → {strategy_type} (score: {score.total_score:.0%}, regime: {score.regime})",
+            epic=score.epic,
+        )
 
     async def _deactivate_market(self, epic: str) -> None:
         """Remove autopilot strategy for a market."""
@@ -136,6 +156,7 @@ class AutoPilotManager:
         if registry_name:
             self.registry.unregister(registry_name)
             logger.info("autopilot_market_deactivated", epic=epic, strategy=registry_name)
+            await self._log_activity("INFO", f"Deactivated {epic} ({registry_name})", epic=epic)
 
     async def deactivate_all(self) -> None:
         """Remove all autopilot-managed strategies."""
@@ -158,6 +179,20 @@ class AutoPilotManager:
         try:
             await self.redis.set("autopilot:status", status)
             await self.redis.set("autopilot:last_scan", datetime.utcnow().isoformat())
+        except Exception:
+            pass
+
+    async def _log_activity(self, level: str, message: str, **extra) -> None:
+        """Push an activity event to Redis for the dashboard live feed."""
+        try:
+            entry = json.dumps({
+                "time": datetime.utcnow().isoformat(),
+                "level": level,
+                "message": message,
+                **{k: str(v) for k, v in extra.items()},
+            })
+            await self.redis.lpush("autopilot:activity", entry)
+            await self.redis.ltrim("autopilot:activity", 0, 49)  # keep last 50
         except Exception:
             pass
 
