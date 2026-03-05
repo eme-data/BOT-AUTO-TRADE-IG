@@ -3,9 +3,10 @@ from __future__ import annotations
 import csv
 import io
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from pydantic import BaseModel
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import AdminUser, Trade
@@ -53,6 +54,7 @@ async def get_trades(
             status=t.status,
             opened_at=t.opened_at,
             closed_at=t.closed_at,
+            notes=t.notes,
         )
         for t in trades
     ]
@@ -106,3 +108,27 @@ async def export_trades_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=trades.csv"},
     )
+
+
+class TradeNotesUpdate(BaseModel):
+    notes: str
+
+
+@router.patch("/{trade_id}/notes")
+async def update_trade_notes(
+    trade_id: int,
+    body: TradeNotesUpdate,
+    db: AsyncSession = Depends(get_db),
+    _user: AdminUser = Depends(get_current_user),
+):
+    """Update notes/journal entry for a specific trade."""
+    result = await db.execute(select(Trade).where(Trade.id == trade_id))
+    trade = result.scalar_one_or_none()
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+
+    await db.execute(
+        update(Trade).where(Trade.id == trade_id).values(notes=body.notes)
+    )
+    await db.commit()
+    return {"status": "ok"}

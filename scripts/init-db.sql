@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS trades (
     status          TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'CLOSED', 'AMENDED')),
     opened_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     closed_at       TIMESTAMPTZ,
+    notes           TEXT,
     metadata        JSONB DEFAULT '{}'
 );
 

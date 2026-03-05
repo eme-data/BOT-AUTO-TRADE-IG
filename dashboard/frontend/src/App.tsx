@@ -11,6 +11,7 @@ import Markets from './pages/Markets'
 import RiskSettings from './pages/RiskSettings'
 import Logs from './pages/Logs'
 import Notifications from './pages/Notifications'
+import Backtest from './pages/Backtest'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, needsSetup } = useAuth()
@@ -73,12 +74,13 @@ function App() {
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
             <span className="text-xl font-bold text-white">IG Trading Bot</span>
-            <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded">v0.1</span>
+            <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded">v0.2</span>
             <BotStatusIndicator />
           </div>
           <div className="flex items-center gap-6">
             <NavLink to="/" end className={navLinkClass}>Dashboard</NavLink>
             <NavLink to="/trades" className={navLinkClass}>Trades</NavLink>
+            <NavLink to="/backtest" className={navLinkClass}>Backtest</NavLink>
             <NavLink to="/logs" className={navLinkClass}>Logs</NavLink>
             <SettingsDropdown />
             <button
@@ -99,6 +101,7 @@ function App() {
           <Route path="/ig-settings" element={<ProtectedRoute><IGSettings /></ProtectedRoute>} />
           <Route path="/markets" element={<ProtectedRoute><Markets /></ProtectedRoute>} />
           <Route path="/risk" element={<ProtectedRoute><RiskSettings /></ProtectedRoute>} />
+          <Route path="/backtest" element={<ProtectedRoute><Backtest /></ProtectedRoute>} />
           <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />

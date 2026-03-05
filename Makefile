@@ -1,4 +1,4 @@
-.PHONY: build up down dev logs test lint clean install
+.PHONY: build up down restart dev logs test lint clean install backup
 
 # Production
 build:
@@ -9,6 +9,9 @@ up:
 
 down:
 	docker compose down
+
+restart:
+	docker compose restart
 
 # Development
 dev:
@@ -56,6 +59,10 @@ ssl:
 ssl-renew:
 	docker compose run --rm certbot renew --webroot -w /var/www/certbot
 	docker compose restart nginx
+
+# Backup
+backup:
+	bash scripts/backup.sh
 
 # Cleanup
 clean:

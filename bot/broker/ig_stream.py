@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
-import time
 from datetime import datetime
 from typing import Callable
 
@@ -13,16 +11,17 @@ from trading_ig.lightstreamer import Subscription
 
 from bot.broker.models import Tick
 from bot.config import settings
+from bot.metrics import STREAM_RECONNECTS
 
 logger = structlog.get_logger()
 
-# Max reconnect attempts before giving up
-MAX_RECONNECT_ATTEMPTS = 10
+MAX_RECONNECT_ATTEMPTS = 50
 RECONNECT_BASE_DELAY = 5  # seconds
+KEEPALIVE_INTERVAL = 30  # seconds
 
 
 class IGStreamClient:
-    """IG Markets Lightstreamer streaming client with auto-reconnect."""
+    """IG Markets Lightstreamer streaming client with robust auto-reconnect."""
 
     def __init__(self, ig_service: IGService, redis_url: str | None = None):
         self._ig = ig_service
@@ -35,6 +34,7 @@ class IGStreamClient:
         self._redis = None
         self._running = False
         self._reconnect_count = 0
+        self._last_tick_time: datetime | None = None
 
     async def connect(self) -> None:
         """Initialize streaming connection."""
@@ -137,6 +137,8 @@ class IGStreamClient:
                 time=datetime.now(),
             )
 
+            self._last_tick_time = tick.time
+
             if self._on_tick:
                 self._on_tick(tick)
 
@@ -195,37 +197,67 @@ class IGStreamClient:
         if self._redis:
             await self._redis.publish(channel, json.dumps(data, default=str))
 
+    async def _check_stale_connection(self) -> bool:
+        """Check if the stream appears stale (no ticks for too long)."""
+        if self._last_tick_time is None:
+            return False
+        elapsed = (datetime.now() - self._last_tick_time).total_seconds()
+        # If no ticks for 5 minutes during market hours, connection is probably stale
+        return elapsed > 300
+
+    async def _reconnect(self) -> None:
+        """Perform a full reconnection with re-subscription."""
+        self._reconnect_count += 1
+        STREAM_RECONNECTS.inc()
+        delay = min(RECONNECT_BASE_DELAY * (2 ** min(self._reconnect_count, 6)), 300)
+        logger.warning(
+            "stream_reconnecting",
+            attempt=self._reconnect_count,
+            delay=delay,
+        )
+        await asyncio.sleep(delay)
+
+        # Disconnect old stream
+        if self._stream:
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, self._stream.disconnect)
+            except Exception:
+                pass
+
+        # Reconnect
+        self._stream = IGStreamService(self._ig)
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: self._stream.create_session(version="2")
+        )
+
+        # Re-subscribe to all previous subscriptions
+        for sub_info in self._subscriptions:
+            if sub_info["type"] == "market":
+                epics = [item.replace("MARKET:", "") for item in sub_info["items"]]
+                await self.subscribe_market(epics)
+        await self.subscribe_trades()
+        await self.subscribe_account()
+        self._reconnect_count = 0
+        logger.info("stream_reconnected")
+
     async def run_with_reconnect(self) -> None:
         """Run streaming with automatic reconnection on disconnect."""
         while self._running and self._reconnect_count < MAX_RECONNECT_ATTEMPTS:
             try:
-                # Keep alive - check connection every 30s
                 while self._running:
-                    await asyncio.sleep(30)
-                    # Lightstreamer has a known 2-hour disconnect issue
-                    # The library handles most reconnections internally
+                    await asyncio.sleep(KEEPALIVE_INTERVAL)
+
+                    # Check for stale connection
+                    if await self._check_stale_connection():
+                        logger.warning("stream_stale_connection_detected")
+                        await self._reconnect()
+
             except Exception as e:
                 if not self._running:
                     break
-                self._reconnect_count += 1
-                delay = min(RECONNECT_BASE_DELAY * (2 ** self._reconnect_count), 300)
-                logger.warning(
-                    "stream_reconnecting",
-                    attempt=self._reconnect_count,
-                    delay=delay,
-                    error=str(e),
-                )
-                await asyncio.sleep(delay)
+                logger.error("stream_error", error=str(e))
                 try:
-                    await self.connect()
-                    # Re-subscribe to all previous subscriptions
-                    for sub_info in self._subscriptions:
-                        if sub_info["type"] == "market":
-                            epics = [item.replace("MARKET:", "") for item in sub_info["items"]]
-                            await self.subscribe_market(epics)
-                    await self.subscribe_trades()
-                    await self.subscribe_account()
-                    self._reconnect_count = 0
+                    await self._reconnect()
                 except Exception as reconnect_error:
                     logger.error("reconnect_failed", error=str(reconnect_error))
 

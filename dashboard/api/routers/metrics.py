@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Trade
+from bot.db.models import AdminUser, Trade
+from dashboard.api.auth.jwt import get_current_user
 from dashboard.api.deps import get_db
 from dashboard.api.schemas import MetricsResponse
 
@@ -59,3 +60,39 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
         losing_trades=losing,
         win_rate=round(win_rate, 1),
     )
+
+
+@router.get("/pnl-history")
+async def get_pnl_history(
+    days: int = Query(default=30, le=365),
+    db: AsyncSession = Depends(get_db),
+    _user: AdminUser = Depends(get_current_user),
+):
+    """Get daily P&L history for the equity curve chart."""
+    result = await db.execute(
+        select(
+            cast(Trade.closed_at, Date).label("day"),
+            func.sum(Trade.profit).label("pnl"),
+            func.count(Trade.id).label("trades"),
+        )
+        .where(Trade.status == "CLOSED", Trade.closed_at.isnot(None))
+        .group_by(cast(Trade.closed_at, Date))
+        .order_by(cast(Trade.closed_at, Date))
+        .limit(days)
+    )
+    rows = result.all()
+
+    # Build cumulative P&L
+    cumulative = 0.0
+    history = []
+    for row in rows:
+        daily = float(row.pnl or 0)
+        cumulative += daily
+        history.append({
+            "date": str(row.day),
+            "daily_pnl": round(daily, 2),
+            "cumulative_pnl": round(cumulative, 2),
+            "trades": row.trades,
+        })
+
+    return history

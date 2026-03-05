@@ -7,9 +7,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from dashboard.api.deps import close_redis
+from sqlalchemy import text
+
+from dashboard.api.deps import close_redis, get_redis
 from dashboard.api.routers import (
     auth,
+    backtest,
     bot_control,
     markets,
     metrics,
@@ -31,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="IG Trading Bot Dashboard",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -56,12 +59,36 @@ app.include_router(settings.router)
 app.include_router(markets.router)
 app.include_router(bot_control.router)
 app.include_router(notifications.router)
+app.include_router(backtest.router)
 app.include_router(ws.router)
 
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health():
-    return HealthResponse()
+    from bot.db.session import async_session_factory
+
+    db_status = "ok"
+    redis_status = "ok"
+    bot_status = "unknown"
+
+    # Check DB
+    try:
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        db_status = "error"
+
+    # Check Redis + bot status
+    try:
+        r = await get_redis()
+        await r.ping()
+        raw = await r.get("bot:current_status")
+        bot_status = raw or "stopped"
+    except Exception:
+        redis_status = "error"
+
+    overall = "ok" if db_status == "ok" and redis_status == "ok" else "degraded"
+    return HealthResponse(status=overall, db=db_status, redis=redis_status, bot=bot_status)
 
 
 # Serve React static files (in production)

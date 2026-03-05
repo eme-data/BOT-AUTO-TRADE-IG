@@ -1,0 +1,71 @@
+groups:
+  - name: trading_bot_alerts
+    rules:
+      # Daily loss limit approaching
+      - alert: DailyLossHigh
+        expr: bot_daily_pnl < -300
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Daily P&L is significantly negative"
+          description: "Daily P&L is {{ $value }}EUR. Consider reviewing open positions."
+
+      - alert: DailyLossCritical
+        expr: bot_daily_pnl < -500
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Daily loss limit approaching"
+          description: "Daily P&L is {{ $value }}EUR. Max daily loss may be hit soon."
+
+      # High order rejection rate
+      - alert: HighOrderRejectionRate
+        expr: sum(rate(bot_orders_rejected_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High order rejection rate"
+          description: "Orders are being rejected frequently. Check risk limits or broker connectivity."
+
+      # Order latency too high
+      - alert: HighOrderLatency
+        expr: histogram_quantile(0.95, rate(bot_order_latency_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Order execution latency is high"
+          description: "p95 order latency is {{ $value }}s. Check broker API connectivity."
+
+      # Stream disconnected (no ticks)
+      - alert: NoTicksReceived
+        expr: rate(bot_ticks_total[5m]) == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No market ticks received"
+          description: "No ticks received for 10 minutes. Stream may be disconnected."
+
+      # Too many stream reconnects
+      - alert: FrequentStreamReconnects
+        expr: increase(bot_stream_reconnects_total[1h]) > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frequent stream reconnections"
+          description: "{{ $value }} reconnection attempts in the last hour."
+
+      # Bot is down (no metrics)
+      - alert: BotDown
+        expr: up{job="trading_bot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Trading bot is down"
+          description: "The trading bot metrics endpoint is not responding."

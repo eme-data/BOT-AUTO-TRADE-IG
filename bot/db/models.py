@@ -88,6 +88,7 @@ class Trade(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
 
     __table_args__ = (

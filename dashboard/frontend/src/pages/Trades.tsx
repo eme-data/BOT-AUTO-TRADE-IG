@@ -14,6 +14,7 @@ interface Trade {
   status: string
   opened_at: string
   closed_at: string | null
+  notes: string | null
 }
 
 export default function Trades() {
@@ -22,10 +23,11 @@ export default function Trades() {
   const [trades, setTrades] = useState<Trade[]>([])
   const [filter, setFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL')
   const [loading, setLoading] = useState(true)
+  const [editingNotes, setEditingNotes] = useState<number | null>(null)
+  const [notesText, setNotesText] = useState('')
 
   const handleExportCSV = () => {
     const params = filter !== 'ALL' ? `?status=${filter}` : ''
-    // Direct download with auth header via a hidden link
     const url = `/api/trades/export/csv${params}`
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.blob())
@@ -48,6 +50,21 @@ export default function Trades() {
       // silent
     } finally {
       setLoading(false)
+    }
+  }
+
+  const saveNotes = async (tradeId: number) => {
+    try {
+      await apiFetch(`/api/trades/${tradeId}/notes`, {
+        method: 'PATCH',
+        body: JSON.stringify({ notes: notesText }),
+      })
+      setTrades((prev) =>
+        prev.map((t) => (t.id === tradeId ? { ...t, notes: notesText } : t))
+      )
+      setEditingNotes(null)
+    } catch {
+      // silent
     }
   }
 
@@ -104,6 +121,7 @@ export default function Trades() {
                 <th className="text-left px-4 py-3">Strategy</th>
                 <th className="text-left px-4 py-3">Status</th>
                 <th className="text-right px-4 py-3">P&L</th>
+                <th className="text-left px-4 py-3">Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -147,6 +165,43 @@ export default function Trades() {
                     {trade.profit != null
                       ? `${trade.profit >= 0 ? '+' : ''}${trade.profit.toFixed(2)}`
                       : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {editingNotes === trade.id ? (
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={notesText}
+                          onChange={(e) => setNotesText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && saveNotes(trade.id)}
+                          className="bg-bg-primary border border-gray-600 rounded px-2 py-1 text-xs w-32"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => saveNotes(trade.id)}
+                          className="text-xs text-blue-400 hover:text-blue-300"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingNotes(null)}
+                          className="text-xs text-gray-500 hover:text-gray-400"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditingNotes(trade.id)
+                          setNotesText(trade.notes || '')
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-300 max-w-[150px] truncate block"
+                        title={trade.notes || 'Click to add notes'}
+                      >
+                        {trade.notes || '+ Add note'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

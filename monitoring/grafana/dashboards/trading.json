@@ -2,14 +2,14 @@
   "annotations": { "list": [] },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
   "panels": [
     {
       "title": "Daily P&L",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
       "targets": [
         {
           "expr": "bot_daily_pnl",
@@ -31,7 +31,7 @@
     {
       "title": "Account Balance",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
       "targets": [
         {
           "expr": "bot_account_balance",
@@ -45,7 +45,7 @@
     {
       "title": "Open Positions",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
       "targets": [
         {
           "expr": "bot_open_positions",
@@ -54,9 +54,78 @@
       ]
     },
     {
-      "title": "Orders per Strategy",
+      "title": "Stream Reconnects",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "bot_stream_reconnects_total",
+          "legendFormat": "Reconnects"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Rejected Orders",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(bot_orders_rejected_total[5m])) * 300",
+          "legendFormat": "Rejected/5m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "P&L Over Time",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "bot_daily_pnl",
+          "legendFormat": "Daily P&L"
+        },
+        {
+          "expr": "bot_account_balance",
+          "legendFormat": "Balance"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "title": "Orders per Strategy",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
       "targets": [
         {
           "expr": "rate(bot_orders_total[5m])",
@@ -65,9 +134,9 @@
       ]
     },
     {
-      "title": "Order Latency",
-      "type": "histogram",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "title": "Order Latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, rate(bot_order_latency_seconds_bucket[5m]))",
@@ -77,12 +146,24 @@
           "expr": "histogram_quantile(0.50, rate(bot_order_latency_seconds_bucket[5m]))",
           "legendFormat": "p50"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
     },
     {
       "title": "Signals Generated",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
       "targets": [
         {
           "expr": "rate(bot_signals_total[5m])",
@@ -91,13 +172,34 @@
       ]
     },
     {
-      "title": "Tick Rate",
+      "title": "Tick Rate by Epic",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
       "targets": [
         {
           "expr": "rate(bot_ticks_total[1m])",
           "legendFormat": "{{epic}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20
+          }
+        }
+      }
+    },
+    {
+      "title": "Rejected Orders by Reason",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(bot_orders_rejected_total[5m])",
+          "legendFormat": "{{reason}}"
         }
       ]
     }
@@ -106,6 +208,7 @@
   "tags": ["trading"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
   "title": "IG Trading Bot",
   "uid": "ig-trading-bot"
 }

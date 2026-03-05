@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from functools import partial
+from functools import partial, wraps
+from typing import TypeVar, Callable, Any
 
 import structlog
 from trading_ig import IGService
@@ -20,13 +21,47 @@ from bot.config import settings
 
 logger = structlog.get_logger()
 
+T = TypeVar("T")
+
+
+def auto_retry(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator that retries broker calls on session errors with auto-reconnect."""
+
+    @wraps(fn)
+    async def wrapper(self: IGRestClient, *args: Any, **kwargs: Any) -> Any:
+        last_error: Exception | None = None
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                return await fn(self, *args, **kwargs)
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                is_session_error = any(
+                    kw in err_str
+                    for kw in ("invalid session", "not logged in", "unauthorized",
+                               "client token", "security token", "403", "401")
+                )
+                if is_session_error and attempt < self.MAX_RETRIES - 1:
+                    logger.warning("ig_session_error_retrying", attempt=attempt + 1, error=str(e))
+                    await asyncio.sleep(self.RETRY_DELAY)
+                    await self.reconnect()
+                else:
+                    raise
+        raise last_error  # type: ignore[misc]
+
+    return wrapper
+
 
 class IGRestClient(BrokerClient):
-    """IG Markets REST API client wrapping trading_ig."""
+    """IG Markets REST API client wrapping trading_ig with auto-reconnect."""
+
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5  # seconds
 
     def __init__(self):
         self._ig: IGService | None = None
         self._loop = asyncio.get_event_loop()
+        self._connected = False
 
     def _run_sync(self, func, *args, **kwargs):
         """Run a synchronous trading_ig call in a thread executor."""
@@ -41,9 +76,22 @@ class IGRestClient(BrokerClient):
             use_rate_limiter=True,
         )
         await self._run_sync(self._ig.create_session, version="2")
+        self._connected = True
         logger.info("ig_connected", acc_type=settings.ig.acc_type)
 
+    async def reconnect(self) -> None:
+        """Re-establish the IG session after expiry or error."""
+        logger.info("ig_reconnecting")
+        self._connected = False
+        try:
+            if self._ig:
+                await self._run_sync(self._ig.logout)
+        except Exception:
+            pass
+        await self.connect()
+
     async def disconnect(self) -> None:
+        self._connected = False
         if self._ig:
             try:
                 await self._run_sync(self._ig.logout)
@@ -52,6 +100,11 @@ class IGRestClient(BrokerClient):
             self._ig = None
             logger.info("ig_disconnected")
 
+    @property
+    def is_connected(self) -> bool:
+        return self._connected and self._ig is not None
+
+    @auto_retry
     async def search_markets(self, term: str) -> list[MarketInfo]:
         result = await self._run_sync(self._ig.search_markets, term)
         markets = []
@@ -72,6 +125,7 @@ class IGRestClient(BrokerClient):
             )
         return markets
 
+    @auto_retry
     async def get_market_info(self, epic: str) -> MarketInfo:
         result = await self._run_sync(self._ig.fetch_market_by_epic, epic)
         inst = result["instrument"]
@@ -94,6 +148,7 @@ class IGRestClient(BrokerClient):
             scaling_factor=float(inst.get("scalingFactor", 1)),
         )
 
+    @auto_retry
     async def get_historical_prices(
         self, epic: str, resolution: str, num_points: int
     ) -> list[OHLCV]:
@@ -118,6 +173,7 @@ class IGRestClient(BrokerClient):
             )
         return bars
 
+    @auto_retry
     async def get_open_positions(self) -> list[Position]:
         result = await self._run_sync(self._ig.fetch_open_positions)
         positions = []
@@ -137,6 +193,7 @@ class IGRestClient(BrokerClient):
             )
         return positions
 
+    @auto_retry
     async def open_position(self, order: OrderRequest) -> OrderResult:
         result = await self._run_sync(
             self._ig.create_open_position,
@@ -165,6 +222,7 @@ class IGRestClient(BrokerClient):
             affected_deals=confirm.get("affectedDeals", []),
         )
 
+    @auto_retry
     async def close_position(self, deal_id: str, direction: str, size: float) -> OrderResult:
         close_direction = "SELL" if direction == "BUY" else "BUY"
         result = await self._run_sync(
@@ -185,6 +243,7 @@ class IGRestClient(BrokerClient):
             reason=confirm.get("reason", ""),
         )
 
+    @auto_retry
     async def amend_position(
         self, deal_id: str, stop_level: float | None = None, limit_level: float | None = None
     ) -> OrderResult:
@@ -197,6 +256,7 @@ class IGRestClient(BrokerClient):
         deal_ref = result.get("dealReference", "")
         return OrderResult(deal_reference=deal_ref, status="AMENDED")
 
+    @auto_retry
     async def get_account_balance(self) -> dict:
         accounts = await self._run_sync(self._ig.fetch_accounts)
         for _, acc in accounts.iterrows():

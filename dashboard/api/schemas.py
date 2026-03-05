@@ -30,6 +30,7 @@ class TradeResponse(BaseModel):
     status: str
     opened_at: datetime
     closed_at: datetime | None = None
+    notes: str | None = None
 
 
 class SignalResponse(BaseModel):
@@ -76,4 +77,7 @@ class AccountResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
+    db: str = "unknown"
+    redis: str = "unknown"
+    bot: str = "unknown"
