@@ -22,11 +22,12 @@ AP_PREFIX = "ap_"  # prefix for autopilot-managed strategies
 class AutoPilotManager:
     """Orchestrates autonomous market scanning, scoring, and strategy activation."""
 
-    def __init__(self, broker, registry, config: AutoPilotConfig, redis: aioredis.Redis):
+    def __init__(self, broker, registry, config: AutoPilotConfig, redis: aioredis.Redis, stream=None):
         self.broker = broker
         self.registry = registry
         self.config = config
         self.redis = redis
+        self.stream = stream
         self.scanner = MarketScanner(broker)
         self.scorer = MarketScorer(broker)
         self.selector = StrategySelector()
@@ -121,7 +122,7 @@ class AutoPilotManager:
             await self._set_status("error")
 
     async def _activate_market(self, score: MarketScore) -> None:
-        """Create and register a strategy for the given market."""
+        """Create and register a strategy for the given market, then subscribe to its stream."""
         strategy_type, config = self.selector.select(score)
         registry_name = f"{AP_PREFIX}{strategy_type}_{score.epic.replace('.', '_')}"
 
@@ -136,6 +137,14 @@ class AutoPilotManager:
         self._active_strategies[score.epic] = registry_name
         score.is_active = True
         score.selected_strategy = strategy_type
+
+        # Subscribe to Lightstreamer stream for this epic (so ticks arrive)
+        if self.stream:
+            try:
+                await self.stream.subscribe_market([score.epic])
+                logger.info("autopilot_subscribed_stream", epic=score.epic)
+            except Exception as e:
+                logger.warning("autopilot_subscribe_error", epic=score.epic, error=str(e))
 
         logger.info(
             "autopilot_market_activated",

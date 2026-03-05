@@ -7,6 +7,7 @@ import sys
 import time
 from collections import deque
 
+import pandas as pd
 import redis.asyncio as aioredis
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,7 +17,7 @@ from bot.broker.ig_stream import IGStreamClient
 from bot.broker.models import Direction, OrderRequest, Tick
 from bot.config import load_settings_from_db, settings
 from bot.data.calendar import EconomicCalendar
-from bot.data.historical import fetch_and_store_historical, load_from_db
+from bot.data.historical import fetch_and_store_historical
 from bot.data.indicators import add_all_indicators
 from bot.db.models import Signal, Trade
 from bot.db.repository import SignalRepository, StrategyStateRepository, TradeRepository
@@ -175,6 +176,9 @@ class TradingBot:
 
     async def start(self) -> None:
         """Start the trading bot."""
+        # Capture event loop for use in Lightstreamer thread callbacks
+        self._loop = asyncio.get_running_loop()
+
         # Load IG/bot settings from DB (overrides .env defaults)
         await load_settings_from_db()
 
@@ -276,7 +280,7 @@ class TradingBot:
             search_terms=[t.strip() for t in settings.autopilot.search_terms.split(",") if t.strip()],
             api_budget_per_cycle=settings.autopilot.api_budget_per_cycle,
         )
-        self.autopilot = AutoPilotManager(self.broker, self.registry, ap_config, r)
+        self.autopilot = AutoPilotManager(self.broker, self.registry, ap_config, r, stream=self.stream)
 
         # Schedule scan job
         if self.scheduler.get_job("autopilot_scan"):
@@ -360,7 +364,7 @@ class TradingBot:
         if updates:
             asyncio.run_coroutine_threadsafe(
                 self.trailing_stop.amend_positions(updates),
-                asyncio.get_event_loop(),
+                self._loop,
             )
 
         signals = self.registry.on_tick(tick)
@@ -369,7 +373,7 @@ class TradingBot:
             # Schedule async signal processing
             asyncio.run_coroutine_threadsafe(
                 self._process_signal(strategy_name, signal),
-                asyncio.get_event_loop(),
+                self._loop,
             )
 
     async def _process_signal(self, strategy_name: str, signal) -> None:
@@ -454,26 +458,55 @@ class TradingBot:
             ORDERS_REJECTED.labels(reason="execution_error").inc()
 
     async def _update_bars(self) -> None:
-        """Periodically update bar data and run bar-based strategy evaluation."""
-        async with async_session_factory() as session:
-            for strategy in self.registry.get_enabled():
-                for epic in strategy.get_required_epics():
-                    try:
-                        df = await load_from_db(
-                            session, epic, strategy.get_required_resolution(),
-                            limit=strategy.get_required_history(),
+        """Periodically fetch fresh bars from IG and run bar-based strategy evaluation."""
+        for strategy in self.registry.get_enabled():
+            for epic in strategy.get_required_epics():
+                try:
+                    resolution = strategy.get_required_resolution()
+                    num_bars = strategy.get_required_history()
+
+                    # Fetch fresh OHLCV data directly from IG API
+                    bars = await self.broker.get_historical_prices(epic, resolution, num_bars)
+                    if not bars or len(bars) < 30:
+                        logger.debug("bar_update_insufficient", epic=epic, bars=len(bars) if bars else 0)
+                        continue
+
+                    # Build DataFrame from raw bars
+                    data = []
+                    for b in bars:
+                        data.append({
+                            "time": b.time,
+                            "open": b.open,
+                            "high": b.high,
+                            "low": b.low,
+                            "close": b.close,
+                            "volume": b.volume,
+                        })
+                    df = pd.DataFrame(data)
+                    if df.empty:
+                        continue
+                    df.set_index("time", inplace=True)
+                    df.sort_index(inplace=True)
+
+                    df = add_all_indicators(df)
+                    result = strategy.on_bar(epic, df)
+                    if result and result.signal_type != "HOLD":
+                        SIGNALS_GENERATED.labels(strategy=strategy.name, signal_type=result.signal_type).inc()
+                        logger.info(
+                            "bar_signal",
+                            epic=epic,
+                            strategy=strategy.name,
+                            signal=result.signal_type,
+                            confidence=result.confidence,
+                            reason=result.reason,
                         )
-                        if df.empty:
-                            continue
+                        await self._process_signal(strategy.name, result)
 
-                        df = add_all_indicators(df)
-                        result = strategy.on_bar(epic, df)
-                        if result and result.signal_type != "HOLD":
-                            SIGNALS_GENERATED.labels(strategy=strategy.name, signal_type=result.signal_type).inc()
-                            await self._process_signal(strategy.name, result)
+                    # Rate limit: 2.5s between API calls
+                    await asyncio.sleep(2.5)
 
-                    except Exception as e:
-                        logger.error("bar_update_error", epic=epic, strategy=strategy.name, error=str(e))
+                except Exception as e:
+                    logger.error("bar_update_error", epic=epic, strategy=strategy.name, error=str(e))
 
     async def _reconcile_positions(self) -> None:
         """Reconcile open positions with broker."""
