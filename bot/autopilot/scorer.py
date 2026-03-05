@@ -35,9 +35,17 @@ class MarketScorer:
                 df = self._bars_to_df(bars)
                 df = add_all_indicators(df)
                 scores_by_tf[tf] = self._score_timeframe(df)
+                self._consecutive_errors = 0  # reset on success
                 await asyncio.sleep(2.5)  # rate limit spacing (IG allows ~30 req/min)
             except Exception as e:
-                logger.warning("score_tf_error", epic=epic, tf=tf, error=str(e))
+                err_str = str(e).lower()
+                is_auth = "401" in err_str or "security token" in err_str or "session expired" in err_str
+                logger.warning("score_tf_error", epic=epic, tf=tf, error=str(e), auth_error=is_auth)
+                if is_auth:
+                    self._consecutive_errors = getattr(self, "_consecutive_errors", 0) + 1
+                    if self._consecutive_errors >= 3:
+                        logger.error("score_session_dead", errors=self._consecutive_errors)
+                        raise  # abort cycle — session is dead, auto_retry will reconnect
 
         if not scores_by_tf:
             logger.warning("score_no_data", epic=epic, instrument=instrument_name)

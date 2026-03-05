@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime
 from functools import partial, wraps
 from typing import TypeVar, Callable, Any
@@ -57,11 +58,13 @@ class IGRestClient(BrokerClient):
 
     MAX_RETRIES = 3
     RETRY_DELAY = 5  # seconds
+    RECONNECT_COOLDOWN = 30  # minimum seconds between reconnections
 
     def __init__(self):
         self._ig: IGService | None = None
         self._loop = asyncio.get_event_loop()
         self._connected = False
+        self._last_reconnect: float = 0  # timestamp of last reconnect
 
     def _run_sync(self, func, *args, **kwargs):
         """Run a synchronous trading_ig call in a thread executor."""
@@ -80,7 +83,12 @@ class IGRestClient(BrokerClient):
         logger.info("ig_connected", acc_type=settings.ig.acc_type)
 
     async def reconnect(self) -> None:
-        """Re-establish the IG session after expiry or error."""
+        """Re-establish the IG session after expiry or error (with cooldown)."""
+        now = time.monotonic()
+        if now - self._last_reconnect < self.RECONNECT_COOLDOWN:
+            logger.debug("ig_reconnect_cooldown", wait=int(self.RECONNECT_COOLDOWN - (now - self._last_reconnect)))
+            return  # skip, too soon since last reconnect
+        self._last_reconnect = now
         logger.info("ig_reconnecting")
         self._connected = False
         try:
@@ -152,24 +160,11 @@ class IGRestClient(BrokerClient):
     async def get_historical_prices(
         self, epic: str, resolution: str, num_points: int
     ) -> list[OHLCV]:
-        try:
-            result = await self._run_sync(
-                self._ig.fetch_historical_prices_by_epic_and_num_points,
-                epic,
-                resolution,
-                num_points,
-            )
-            return self._parse_prices_df(result["prices"])
-        except ValueError as e:
-            if "Invalid frequency" not in str(e):
-                raise
-            # Pandas 2.2+ rejects IG resolution strings ("HOUR", "DAY") as frequency aliases.
-            # Fall back to direct REST API call and parse the JSON ourselves.
-            logger.debug("ig_prices_frequency_fallback", epic=epic, resolution=resolution)
-            raw = await self._run_sync(
-                self._fetch_prices_raw, epic, resolution, num_points
-            )
-            return self._parse_prices_json(raw)
+        # Use direct REST API call (trading_ig's DataFrame path breaks with pandas 2.2+)
+        raw = await self._run_sync(
+            self._fetch_prices_raw, epic, resolution, num_points
+        )
+        return self._parse_prices_json(raw)
 
     def _parse_prices_df(self, prices) -> list[OHLCV]:
         """Parse prices from a trading_ig DataFrame."""
@@ -198,6 +193,8 @@ class IGRestClient(BrokerClient):
         session.headers["VERSION"] = "3"
         try:
             response = session.get(f"{base_url}{url}", params=params)
+            if response.status_code == 401:
+                raise Exception(f"IG session expired (401): {response.text}")
             response.raise_for_status()
             data = response.json()
             return data.get("prices", [])
