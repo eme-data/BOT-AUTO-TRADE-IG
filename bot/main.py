@@ -243,7 +243,10 @@ class TradingBot:
             self.autopilot = None
         if self._command_task and not self._command_task.done():
             self._command_task.cancel()
-        self.scheduler.shutdown(wait=False)
+        try:
+            self.scheduler.shutdown(wait=False)
+        except Exception:
+            pass
         if self.stream:
             await self.stream.disconnect()
         await self.broker.disconnect()
@@ -504,5 +507,10 @@ async def main() -> None:
         await bot.start()
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        logger.error("bot_fatal_error", error=str(e))
     finally:
-        await bot.stop()
+        try:
+            await bot.stop()
+        except Exception:
+            pass
