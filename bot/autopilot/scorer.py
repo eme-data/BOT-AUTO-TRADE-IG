@@ -30,15 +30,17 @@ class MarketScorer:
             try:
                 bars = await self.broker.get_historical_prices(epic, tf, 100)
                 if len(bars) < 50:
+                    logger.warning("score_insufficient_bars", epic=epic, tf=tf, bars=len(bars))
                     continue
                 df = self._bars_to_df(bars)
                 df = add_all_indicators(df)
                 scores_by_tf[tf] = self._score_timeframe(df)
                 await asyncio.sleep(1.5)  # rate limit spacing
             except Exception as e:
-                logger.debug("score_tf_error", epic=epic, tf=tf, error=str(e))
+                logger.warning("score_tf_error", epic=epic, tf=tf, error=str(e))
 
         if not scores_by_tf:
+            logger.warning("score_no_data", epic=epic, instrument=instrument_name)
             return MarketScore(epic=epic, instrument_name=instrument_name)
 
         return self._combine_scores(epic, instrument_name, scores_by_tf)

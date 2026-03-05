@@ -13,6 +13,9 @@ from bot.db.models import WatchedMarket
 
 logger = structlog.get_logger()
 
+# Market types suitable for autopilot trading (exclude ETFs, shares, etc.)
+ALLOWED_TYPES = {"CURRENCIES", "INDICES", "COMMODITIES", "RATES", "BUNGEE"}
+
 
 class MarketScanner:
     """Discovers and filters tradeable markets."""
@@ -53,16 +56,30 @@ class MarketScanner:
         seen_epics: set[str] = set()
         markets: list[MarketInfo] = []
 
+        rejected_types: dict[str, int] = {}
         for term in config.search_terms:
             try:
                 results = await self.broker.search_markets(term)
                 for info in results:
-                    if info.epic not in seen_epics and info.market_status == "TRADEABLE":
-                        seen_epics.add(info.epic)
-                        markets.append(info)
+                    if info.epic in seen_epics:
+                        continue
+                    if info.market_status != "TRADEABLE":
+                        continue
+                    if info.instrument_type not in ALLOWED_TYPES:
+                        rejected_types[info.instrument_type] = rejected_types.get(info.instrument_type, 0) + 1
+                        continue
+                    seen_epics.add(info.epic)
+                    markets.append(info)
                 await asyncio.sleep(1.5)
             except Exception as e:
-                logger.debug("discovery_scan_error", term=term, error=str(e))
+                logger.warning("discovery_scan_error", term=term, error=str(e))
 
-        logger.info("discovery_scan_complete", terms=len(config.search_terms), tradeable=len(markets))
+        if rejected_types:
+            logger.info("discovery_rejected_types", rejected=rejected_types)
+
+        # Log instrument types found for debugging
+        type_counts: dict[str, int] = {}
+        for m in markets:
+            type_counts[m.instrument_type] = type_counts.get(m.instrument_type, 0) + 1
+        logger.info("discovery_scan_complete", terms=len(config.search_terms), tradeable=len(markets), types=type_counts)
         return markets
