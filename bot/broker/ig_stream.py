@@ -74,15 +74,19 @@ class IGStreamClient:
         self._running = False
         self._reconnect_count = 0
         self._last_tick_time: datetime | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def connect(self) -> None:
         """Initialize streaming connection."""
+        # Capture the main event loop so callbacks from Lightstreamer threads can use it
+        self._loop = asyncio.get_running_loop()
+
         if self._redis_url:
             import redis.asyncio as aioredis
             self._redis = aioredis.from_url(self._redis_url)
 
         self._stream = IGStreamService(self._ig)
-        await asyncio.get_event_loop().run_in_executor(
+        await self._loop.run_in_executor(
             None, lambda: self._stream.create_session(version="2")
         )
         self._running = True
@@ -94,7 +98,7 @@ class IGStreamClient:
         self._running = False
         if self._stream:
             try:
-                await asyncio.get_event_loop().run_in_executor(
+                await self._loop.run_in_executor(
                     None, self._stream.disconnect
                 )
             except Exception:
@@ -124,7 +128,7 @@ class IGStreamClient:
         sub = Subscription(mode="MERGE", items=items, fields=fields)
         sub.addListener(_MarketListener(self._on_market_update))
 
-        await asyncio.get_event_loop().run_in_executor(
+        await self._loop.run_in_executor(
             None, self._stream.ls_client.subscribe, sub
         )
         logger.info("subscribed_markets", epics=epics)
@@ -138,7 +142,7 @@ class IGStreamClient:
         sub = Subscription(mode="DISTINCT", items=items, fields=fields)
         sub.addListener(_TradeListener(self._on_trade_update))
 
-        await asyncio.get_event_loop().run_in_executor(
+        await self._loop.run_in_executor(
             None, self._stream.ls_client.subscribe, sub
         )
         logger.info("subscribed_trades", account=acc_id)
@@ -152,7 +156,7 @@ class IGStreamClient:
         sub = Subscription(mode="MERGE", items=items, fields=fields)
         sub.addListener(_AccountListener(self._on_account_update))
 
-        await asyncio.get_event_loop().run_in_executor(
+        await self._loop.run_in_executor(
             None, self._stream.ls_client.subscribe, sub
         )
         logger.info("subscribed_account", account=acc_id)
@@ -184,7 +188,7 @@ class IGStreamClient:
             # Publish to Redis if available
             if self._redis:
                 asyncio.run_coroutine_threadsafe(
-                    self._publish_tick(tick), asyncio.get_event_loop()
+                    self._publish_tick(tick), self._loop
                 )
         except Exception as e:
             logger.error("market_update_error", error=str(e))
@@ -198,7 +202,7 @@ class IGStreamClient:
 
             if self._redis:
                 asyncio.run_coroutine_threadsafe(
-                    self._publish_event("bot:trades", values), asyncio.get_event_loop()
+                    self._publish_event("bot:trades", values), self._loop
                 )
         except Exception as e:
             logger.error("trade_update_error", error=str(e))
@@ -212,7 +216,7 @@ class IGStreamClient:
 
             if self._redis:
                 asyncio.run_coroutine_threadsafe(
-                    self._publish_event("bot:account", values), asyncio.get_event_loop()
+                    self._publish_event("bot:account", values), self._loop
                 )
         except Exception as e:
             logger.error("account_update_error", error=str(e))
@@ -259,13 +263,13 @@ class IGStreamClient:
         # Disconnect old stream
         if self._stream:
             try:
-                await asyncio.get_event_loop().run_in_executor(None, self._stream.disconnect)
+                await self._loop.run_in_executor(None, self._stream.disconnect)
             except Exception:
                 pass
 
         # Reconnect
         self._stream = IGStreamService(self._ig)
-        await asyncio.get_event_loop().run_in_executor(
+        await self._loop.run_in_executor(
             None, lambda: self._stream.create_session(version="2")
         )
 
