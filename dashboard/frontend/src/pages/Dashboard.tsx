@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
+import { NavLink } from 'react-router-dom'
 import { useApiFetch } from '../context/AuthContext'
 import MetricsCards from '../components/MetricsCards'
 import PositionsTable from '../components/PositionsTable'
 import PnLChart from '../components/PnLChart'
 import { useWebSocket } from '../hooks/useWebSocket'
+
+interface AutoPilotStatus {
+  enabled: boolean
+  status: string
+  last_scan: string | null
+  active_markets: number
+  scores: { epic: string; instrument_name: string; total_score: number; is_active: boolean; selected_strategy: string | null }[]
+}
 
 interface Metrics {
   daily_pnl: number
@@ -48,6 +57,7 @@ export default function Dashboard() {
   const [account, setAccount] = useState<AccountInfo | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [pnlHistory, setPnlHistory] = useState<PnLPoint[]>([])
+  const [autopilot, setAutopilot] = useState<AutoPilotStatus | null>(null)
 
   const handleMessage = useCallback((data: { type: string; [key: string]: unknown }) => {
     if (data.type === 'tick') {
@@ -95,14 +105,25 @@ export default function Dashboard() {
     }
   }
 
+  const fetchAutopilot = async () => {
+    try {
+      const res = await apiFetch('/api/autopilot/status')
+      if (res.ok) setAutopilot(await res.json())
+    } catch {
+      // silent
+    }
+  }
+
   useEffect(() => {
     fetchMetrics()
     fetchAccount()
     fetchPositions()
     fetchPnlHistory()
+    fetchAutopilot()
     const interval = setInterval(() => {
       fetchMetrics()
       fetchPositions()
+      fetchAutopilot()
     }, 10000)
     // Refresh account balance every 60s (IG rate limits)
     const accountInterval = setInterval(fetchAccount, 60000)
@@ -117,15 +138,68 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Connection status */}
-      <div className="flex items-center gap-2">
-        <div
-          className={`w-2 h-2 rounded-full ${connected ? 'bg-profit' : 'bg-loss'}`}
-        />
-        <span className="text-xs text-gray-400">
-          {connected ? 'Connected' : 'Disconnected'}
-        </span>
+      {/* Connection status + Auto-Pilot status */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-2 h-2 rounded-full ${connected ? 'bg-profit' : 'bg-loss'}`}
+          />
+          <span className="text-xs text-gray-400">
+            {connected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
+
+        {autopilot && (
+          <NavLink to="/autopilot" className="flex items-center gap-3 bg-bg-card border border-gray-700 rounded-lg px-4 py-2 hover:border-gray-500 transition-colors">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${
+                autopilot.status === 'scanning' ? 'bg-yellow-400 animate-pulse'
+                  : autopilot.enabled ? 'bg-profit' : 'bg-gray-500'
+              }`} />
+              <span className="text-sm font-medium text-white">Auto-Pilot</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                autopilot.enabled ? 'bg-profit/20 text-profit' : 'bg-gray-600/30 text-gray-400'
+              }`}>
+                {autopilot.enabled ? 'ON' : 'OFF'}
+              </span>
+            </div>
+            {autopilot.enabled && (
+              <div className="flex items-center gap-3 text-xs text-gray-400 border-l border-gray-700 pl-3">
+                <span>{autopilot.active_markets} active</span>
+                <span>{autopilot.scores.length} scored</span>
+                {autopilot.last_scan && (
+                  <span>Last: {new Date(autopilot.last_scan).toLocaleTimeString()}</span>
+                )}
+              </div>
+            )}
+          </NavLink>
+        )}
       </div>
+
+      {/* Active Auto-Pilot markets summary */}
+      {autopilot?.enabled && autopilot.scores.some(s => s.is_active) && (
+        <div className="bg-bg-card rounded-lg border border-gray-700 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Auto-Pilot Active Markets</h3>
+            <NavLink to="/autopilot" className="text-xs text-blue-400 hover:text-blue-300">View all</NavLink>
+          </div>
+          <div className="flex gap-3">
+            {autopilot.scores.filter(s => s.is_active).map(s => (
+              <div key={s.epic} className="flex items-center gap-2 bg-bg-primary rounded px-3 py-1.5">
+                <span className="text-sm font-medium text-white">{s.instrument_name || s.epic}</span>
+                <span className={`text-xs font-bold ${
+                  s.total_score >= 0.7 ? 'text-profit' : s.total_score >= 0.5 ? 'text-yellow-400' : 'text-gray-500'
+                }`}>
+                  {(s.total_score * 100).toFixed(0)}
+                </span>
+                {s.selected_strategy && (
+                  <span className="text-xs text-gray-500">{s.selected_strategy}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metrics */}
       <MetricsCards metrics={metrics} account={account} />
