@@ -189,19 +189,19 @@ class IGRestClient(BrokerClient):
 
     def _fetch_prices_raw(self, epic: str, resolution: str, num_points: int) -> list[dict]:
         """Fetch historical prices directly from IG REST API (bypasses trading_ig DataFrame)."""
-        url = f"/prices/{epic}/{resolution}/{num_points}"
-        # Use version 3 for the prices endpoint
+        # IG REST API v3: GET /prices/{epic}?resolution=X&max=N&pageSize=0
+        url = f"/prices/{epic}"
+        params = {"resolution": resolution, "max": num_points, "pageSize": 0}
         session = self._ig.session
         base_url = self._ig.BASE_URL
         old_version = session.headers.get("VERSION")
         session.headers["VERSION"] = "3"
         try:
-            response = session.get(f"{base_url}{url}")
+            response = session.get(f"{base_url}{url}", params=params)
             response.raise_for_status()
             data = response.json()
             return data.get("prices", [])
         finally:
-            # Restore original version header
             if old_version:
                 session.headers["VERSION"] = old_version
             else:
