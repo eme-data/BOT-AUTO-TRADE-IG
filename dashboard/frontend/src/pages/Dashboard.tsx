@@ -13,6 +13,15 @@ interface Metrics {
   winning_trades: number
   losing_trades: number
   win_rate: number
+  account_balance: number
+}
+
+interface AccountInfo {
+  balance: number
+  deposit: number
+  profit_loss: number
+  available: number
+  currency: string
 }
 
 interface Position {
@@ -36,6 +45,7 @@ interface PnLPoint {
 export default function Dashboard() {
   const apiFetch = useApiFetch()
   const [metrics, setMetrics] = useState<Metrics | null>(null)
+  const [account, setAccount] = useState<AccountInfo | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [pnlHistory, setPnlHistory] = useState<PnLPoint[]>([])
 
@@ -67,6 +77,15 @@ export default function Dashboard() {
     }
   }
 
+  const fetchAccount = async () => {
+    try {
+      const res = await apiFetch('/api/metrics/account')
+      if (res.ok) setAccount(await res.json())
+    } catch {
+      // silent
+    }
+  }
+
   const fetchPnlHistory = async () => {
     try {
       const res = await apiFetch('/api/metrics/pnl-history?days=30')
@@ -78,13 +97,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchMetrics()
+    fetchAccount()
     fetchPositions()
     fetchPnlHistory()
     const interval = setInterval(() => {
       fetchMetrics()
       fetchPositions()
     }, 10000)
-    return () => clearInterval(interval)
+    // Refresh account balance every 60s (IG rate limits)
+    const accountInterval = setInterval(fetchAccount, 60000)
+    return () => { clearInterval(interval); clearInterval(accountInterval) }
   }, [])
 
   // Transform P&L history for the chart
@@ -106,7 +128,7 @@ export default function Dashboard() {
       </div>
 
       {/* Metrics */}
-      <MetricsCards metrics={metrics} />
+      <MetricsCards metrics={metrics} account={account} />
 
       {/* P&L Chart */}
       <PnLChart data={pnlData} />

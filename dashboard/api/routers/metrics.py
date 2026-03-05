@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import AdminUser, Trade
 from dashboard.api.auth.jwt import get_current_user
-from dashboard.api.deps import get_db
-from dashboard.api.schemas import MetricsResponse
+from dashboard.api.deps import get_db, get_redis
+from dashboard.api.schemas import AccountResponse, MetricsResponse
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+log = logging.getLogger(__name__)
 
 
 @router.get("", response_model=MetricsResponse)
@@ -51,6 +54,18 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
     )
     daily_pnl = float(today_result.scalar_one() or 0)
 
+    # Account balance from IG (cached in Redis)
+    account_balance = 0.0
+    try:
+        r = await get_redis()
+        cached = await r.get("ig:account_balance")
+        if cached:
+            account_balance = float(cached)
+        else:
+            account_balance = await _fetch_ig_balance(db, r)
+    except Exception as exc:
+        log.debug("Could not fetch account balance: %s", exc)
+
     return MetricsResponse(
         daily_pnl=round(daily_pnl, 2),
         total_pnl=round(total_pnl, 2),
@@ -59,6 +74,7 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
         winning_trades=winning,
         losing_trades=losing,
         win_rate=round(win_rate, 1),
+        account_balance=round(account_balance, 2),
     )
 
 
@@ -96,3 +112,83 @@ async def get_pnl_history(
         })
 
     return history
+
+
+async def _fetch_ig_balance(db: AsyncSession, redis) -> float:
+    """Fetch account balance from IG and cache it for 60 seconds."""
+    from dashboard.api.routers.settings import get_ig_credentials
+
+    creds = await get_ig_credentials(db)
+    if not creds.get("api_key") or not creds.get("username"):
+        return 0.0
+
+    from trading_ig import IGService
+
+    ig = IGService(
+        creds["username"],
+        creds["password"],
+        creds["api_key"],
+        creds.get("acc_type", "DEMO"),
+        use_rate_limiter=True,
+    )
+    ig.create_session(version="2")
+    accounts = ig.fetch_accounts()
+    ig.logout()
+
+    # Find preferred account or the configured one
+    acc_number = creds.get("acc_number", "")
+    balance = 0.0
+    for _, row in accounts.iterrows():
+        if acc_number and row.get("accountId") == acc_number:
+            balance = float(row.get("balance", 0))
+            break
+        if row.get("preferred", False):
+            balance = float(row.get("balance", 0))
+
+    await redis.set("ig:account_balance", str(balance), ex=60)
+    return balance
+
+
+@router.get("/account", response_model=AccountResponse)
+async def get_account(
+    db: AsyncSession = Depends(get_db),
+    _user: AdminUser = Depends(get_current_user),
+):
+    """Get IG account details (balance, deposit, available, P&L)."""
+    from dashboard.api.routers.settings import get_ig_credentials
+
+    creds = await get_ig_credentials(db)
+    if not creds.get("api_key") or not creds.get("username"):
+        return AccountResponse()
+
+    try:
+        from trading_ig import IGService
+
+        ig = IGService(
+            creds["username"],
+            creds["password"],
+            creds["api_key"],
+            creds.get("acc_type", "DEMO"),
+            use_rate_limiter=True,
+        )
+        ig.create_session(version="2")
+        accounts = ig.fetch_accounts()
+        ig.logout()
+
+        acc_number = creds.get("acc_number", "")
+        for _, row in accounts.iterrows():
+            if (acc_number and row.get("accountId") == acc_number) or row.get("preferred", False):
+                r = await get_redis()
+                balance = float(row.get("balance", 0))
+                await r.set("ig:account_balance", str(balance), ex=60)
+                return AccountResponse(
+                    balance=balance,
+                    deposit=float(row.get("deposit", 0)),
+                    profit_loss=float(row.get("profitLoss", 0)),
+                    available=float(row.get("available", 0)),
+                    currency=str(row.get("currency", "EUR")),
+                )
+    except Exception as exc:
+        log.warning("Could not fetch IG account: %s", exc)
+
+    return AccountResponse()
