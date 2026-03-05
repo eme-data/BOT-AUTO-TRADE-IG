@@ -193,8 +193,9 @@ class IGRestClient(BrokerClient):
         session.headers["VERSION"] = "3"
         try:
             response = session.get(f"{base_url}{url}", params=params)
-            if response.status_code == 401:
-                raise Exception(f"IG session expired (401): {response.text}")
+            if response.status_code in (401, 403):
+                body = response.text[:200]
+                raise Exception(f"IG API error ({response.status_code}): {body}")
             response.raise_for_status()
             data = response.json()
             return data.get("prices", [])
