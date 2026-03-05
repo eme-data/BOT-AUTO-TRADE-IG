@@ -1,6 +1,4 @@
-upstream dashboard_backend {
-    server dashboard:8000;
-}
+resolver 127.0.0.11 valid=10s;
 
 # HTTP only (before SSL certificate is obtained)
 server {
@@ -14,7 +12,8 @@ server {
 
     # API and static files
     location / {
-        proxy_pass http://dashboard_backend;
+        set $backend http://dashboard:8000;
+        proxy_pass $backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -23,7 +22,8 @@ server {
 
     # WebSocket endpoint
     location /ws/ {
-        proxy_pass http://dashboard_backend;
+        set $backend http://dashboard:8000;
+        proxy_pass $backend;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
