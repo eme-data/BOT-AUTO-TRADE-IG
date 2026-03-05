@@ -231,7 +231,7 @@ info "Step 6/7 — Building Docker images (this may take a few minutes)..."
 # Use HTTP-only nginx config initially if SSL will be set up
 # (cert doesn't exist yet, so nginx would fail with the SSL config)
 if [[ "$SETUP_SSL" == true ]] || [[ ! -d "/etc/letsencrypt/live/${DOMAIN:-localhost}" ]]; then
-    cp "$APP_DIR/nginx/conf.d/app-http-only.conf" "$APP_DIR/nginx/conf.d/app.conf"
+    cp "$APP_DIR/nginx/conf.d/app-http-only.conf.tpl" "$APP_DIR/nginx/conf.d/app.conf.template"
     info "Using HTTP-only config (SSL will be configured after certificate is obtained)."
 fi
 
@@ -272,7 +272,7 @@ if [[ "$SETUP_SSL" == true ]]; then
         -d "$DOMAIN"; then
 
         # Switch to SSL nginx config
-        cp "$APP_DIR/nginx/conf.d/app-ssl.conf" "$APP_DIR/nginx/conf.d/app.conf"
+        cp "$APP_DIR/nginx/conf.d/app-ssl.conf.tpl" "$APP_DIR/nginx/conf.d/app.conf.template"
         docker compose restart nginx
         info "SSL certificate obtained and nginx configured with HTTPS!"
 

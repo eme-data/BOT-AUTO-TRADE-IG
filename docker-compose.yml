@@ -89,6 +89,8 @@ services:
       - certbot_certs:/etc/letsencrypt:ro
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      # Only substitute DOMAIN, leave nginx variables ($host, $uri, etc.) untouched
+      NGINX_ENVSUBST_FILTER: "DOMAIN"
     depends_on:
       - dashboard
     networks:

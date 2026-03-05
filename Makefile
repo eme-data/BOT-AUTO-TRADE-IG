@@ -54,7 +54,7 @@ ssl:
 	docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
 		--email $(EMAIL) --agree-tos --no-eff-email \
 		-d $(DOMAIN)
-	cp nginx/conf.d/app-ssl.conf nginx/conf.d/app.conf
+	cp nginx/conf.d/app-ssl.conf.tpl nginx/conf.d/app.conf.template
 	docker compose restart nginx
 
 ssl-renew:
@@ -63,7 +63,7 @@ ssl-renew:
 
 # Switch to HTTP-only mode (no SSL)
 no-ssl:
-	cp nginx/conf.d/app-http-only.conf nginx/conf.d/app.conf
+	cp nginx/conf.d/app-http-only.conf.tpl nginx/conf.d/app.conf.template
 	docker compose restart nginx
 
 # Backup
