@@ -152,13 +152,27 @@ class IGRestClient(BrokerClient):
     async def get_historical_prices(
         self, epic: str, resolution: str, num_points: int
     ) -> list[OHLCV]:
-        result = await self._run_sync(
-            self._ig.fetch_historical_prices_by_epic_and_num_points,
-            epic,
-            resolution,
-            num_points,
-        )
-        prices = result["prices"]
+        try:
+            result = await self._run_sync(
+                self._ig.fetch_historical_prices_by_epic_and_num_points,
+                epic,
+                resolution,
+                num_points,
+            )
+            return self._parse_prices_df(result["prices"])
+        except ValueError as e:
+            if "Invalid frequency" not in str(e):
+                raise
+            # Pandas 2.2+ rejects IG resolution strings ("HOUR", "DAY") as frequency aliases.
+            # Fall back to direct REST API call and parse the JSON ourselves.
+            logger.debug("ig_prices_frequency_fallback", epic=epic, resolution=resolution)
+            raw = await self._run_sync(
+                self._fetch_prices_raw, epic, resolution, num_points
+            )
+            return self._parse_prices_json(raw)
+
+    def _parse_prices_df(self, prices) -> list[OHLCV]:
+        """Parse prices from a trading_ig DataFrame."""
         bars = []
         for _, row in prices.iterrows():
             bars.append(
@@ -169,6 +183,59 @@ class IGRestClient(BrokerClient):
                     low=float(row.get(("mid", "Low"), row.get(("bid", "Low"), 0))),
                     close=float(row.get(("mid", "Close"), row.get(("bid", "Close"), 0))),
                     volume=int(row.get(("last", "Volume"), 0)),
+                )
+            )
+        return bars
+
+    def _fetch_prices_raw(self, epic: str, resolution: str, num_points: int) -> list[dict]:
+        """Fetch historical prices directly from IG REST API (bypasses trading_ig DataFrame)."""
+        url = f"/prices/{epic}/{resolution}/{num_points}"
+        # Use version 3 for the prices endpoint
+        session = self._ig.session
+        base_url = self._ig.BASE_URL
+        old_version = session.headers.get("VERSION")
+        session.headers["VERSION"] = "3"
+        try:
+            response = session.get(f"{base_url}{url}")
+            response.raise_for_status()
+            data = response.json()
+            return data.get("prices", [])
+        finally:
+            # Restore original version header
+            if old_version:
+                session.headers["VERSION"] = old_version
+            else:
+                session.headers.pop("VERSION", None)
+
+    @staticmethod
+    def _parse_prices_json(prices: list[dict]) -> list[OHLCV]:
+        """Parse raw JSON price data from IG REST API into OHLCV objects."""
+        bars = []
+        for p in prices:
+            snap_time = p.get("snapshotTime", "")
+            try:
+                dt = datetime.strptime(snap_time, "%Y/%m/%d %H:%M:%S")
+            except (ValueError, TypeError):
+                try:
+                    dt = datetime.strptime(snap_time, "%Y-%m-%dT%H:%M:%S")
+                except (ValueError, TypeError):
+                    dt = datetime.now()
+
+            mid = p.get("closePrice") or p.get("openPrice") or {}
+            bid = mid  # fallback
+            high_p = p.get("highPrice") or {}
+            low_p = p.get("lowPrice") or {}
+            open_p = p.get("openPrice") or {}
+            close_p = p.get("closePrice") or {}
+
+            bars.append(
+                OHLCV(
+                    time=dt,
+                    open=float(open_p.get("mid") or open_p.get("bid") or 0),
+                    high=float(high_p.get("mid") or high_p.get("bid") or 0),
+                    low=float(low_p.get("mid") or low_p.get("bid") or 0),
+                    close=float(close_p.get("mid") or close_p.get("bid") or 0),
+                    volume=int(p.get("lastTradedVolume", 0)),
                 )
             )
         return bars
