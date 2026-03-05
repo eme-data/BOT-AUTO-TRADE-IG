@@ -35,19 +35,28 @@ def add_atr(df: pd.DataFrame, length: int = 14) -> pd.DataFrame:
 
 def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Add a comprehensive set of indicators to OHLCV dataframe."""
-    strategy = ta.Strategy(
-        name="trading_bot",
-        ta=[
-            {"kind": "rsi", "length": 14},
-            {"kind": "macd", "fast": 12, "slow": 26, "signal": 9},
-            {"kind": "bbands", "length": 20, "std": 2},
-            {"kind": "atr", "length": 14},
-            {"kind": "ema", "length": 20},
-            {"kind": "ema", "length": 50},
-            {"kind": "ema", "length": 200},
-            {"kind": "adx", "length": 14},
-            {"kind": "stoch", "k": 14, "d": 3},
-        ],
-    )
-    df.ta.strategy(strategy)
+    # Use direct function calls instead of ta.Strategy (not available in all versions)
+    df["RSI_14"] = ta.rsi(df["close"], length=14)
+
+    macd = ta.macd(df["close"], fast=12, slow=26, signal=9)
+    if macd is not None:
+        df = pd.concat([df, macd], axis=1)
+
+    bbands = ta.bbands(df["close"], length=20, std=2)
+    if bbands is not None:
+        df = pd.concat([df, bbands], axis=1)
+
+    df["ATRr_14"] = ta.atr(df["high"], df["low"], df["close"], length=14)
+    df["EMA_20"] = ta.ema(df["close"], length=20)
+    df["EMA_50"] = ta.ema(df["close"], length=50)
+    df["EMA_200"] = ta.ema(df["close"], length=200)
+
+    adx = ta.adx(df["high"], df["low"], df["close"], length=14)
+    if adx is not None:
+        df = pd.concat([df, adx], axis=1)
+
+    stoch = ta.stoch(df["high"], df["low"], df["close"], k=14, d=3)
+    if stoch is not None:
+        df = pd.concat([df, stoch], axis=1)
+
     return df

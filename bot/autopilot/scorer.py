@@ -35,7 +35,7 @@ class MarketScorer:
                 df = self._bars_to_df(bars)
                 df = add_all_indicators(df)
                 scores_by_tf[tf] = self._score_timeframe(df)
-                await asyncio.sleep(1.5)  # rate limit spacing
+                await asyncio.sleep(2.5)  # rate limit spacing (IG allows ~30 req/min)
             except Exception as e:
                 logger.warning("score_tf_error", epic=epic, tf=tf, error=str(e))
 
