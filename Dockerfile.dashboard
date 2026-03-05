@@ -27,10 +27,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
-COPY dashboard/api/ ./dashboard/api/
-COPY bot/config.py ./bot/config.py
-COPY bot/__init__.py ./bot/__init__.py
-COPY bot/db/ ./bot/db/
+COPY dashboard/ ./dashboard/
+COPY bot/ ./bot/
 COPY --from=frontend-builder /frontend/dist ./dashboard/static
 
 EXPOSE 8000
