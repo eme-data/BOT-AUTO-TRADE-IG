@@ -100,7 +100,9 @@ class TradingBot:
             r = await self._get_redis()
             await r.publish("bot:status", json.dumps({"status": status}))
             # Also update the DB setting via Redis command channel
-            await r.set("bot:current_status", status)
+            # TTL of 90s — the periodic account metrics job (every 60s) refreshes it.
+            # If the bot crashes, the key expires and the dashboard resumes direct IG calls.
+            await r.set("bot:current_status", status, ex=90)
         except Exception as e:
             logger.warning("redis_status_publish_error", error=str(e))
 
@@ -492,6 +494,8 @@ class TradingBot:
             r = await self._get_redis()
             await r.set("ig:account_info", json.dumps(balance, default=str), ex=120)
             await r.set("ig:account_balance", str(balance.get("balance", 0)), ex=120)
+            # Refresh the "bot is alive" heartbeat
+            await r.set("bot:current_status", "running", ex=90)
         except Exception as e:
             logger.error("account_metrics_error", error=str(e))
 
