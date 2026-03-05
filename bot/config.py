@@ -78,7 +78,7 @@ class AutoPilotSettings(BaseSettings):
     scan_interval_minutes: int = 30
     max_active_markets: int = 3
     min_score_threshold: float = 0.5
-    universe_mode: str = "watchlist"
+    universe_mode: str = "discovery"
     search_terms: str = "EUR/USD,GBP/USD,USD/JPY,US 500,FTSE 100,Germany 40,Gold,Oil"
     prefer_trend_following: bool = True
     api_budget_per_cycle: int = 30
