@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import BotStatusIndicator from './components/BotStatusIndicator'
@@ -27,10 +27,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function SettingsDropdown() {
   const [open, setOpen] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const linkClass = 'block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white'
 
+  const handleMouseEnter = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    closeTimer.current = setTimeout(() => setOpen(false), 200)
+  }, [])
+
   return (
-    <div className="relative" onMouseLeave={() => setOpen(false)}>
+    <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       <button
         onClick={() => setOpen(!open)}
         className="text-sm font-medium text-gray-400 hover:text-white"
@@ -38,7 +50,7 @@ function SettingsDropdown() {
         Config
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-44 bg-bg-secondary border border-gray-700 rounded-lg shadow-xl z-50 py-1">
+        <div className="absolute right-0 top-full mt-0 w-44 bg-bg-secondary border border-gray-700 rounded-lg shadow-xl z-50 py-1 pt-2">
           <NavLink to="/ig-settings" className={linkClass} onClick={() => setOpen(false)}>IG Account</NavLink>
           <NavLink to="/markets" className={linkClass} onClick={() => setOpen(false)}>Markets</NavLink>
           <NavLink to="/settings" className={linkClass} onClick={() => setOpen(false)}>Strategies</NavLink>
