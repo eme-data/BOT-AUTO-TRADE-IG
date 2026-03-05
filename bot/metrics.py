@@ -11,5 +11,15 @@ TICK_RATE = Counter("bot_ticks_total", "Total ticks received", ["epic"])
 STREAM_RECONNECTS = Counter("bot_stream_reconnects_total", "Stream reconnection attempts")
 
 
+_metrics_started = False
+
+
 def start_metrics_server(port: int = 8001) -> None:
-    start_http_server(port)
+    global _metrics_started
+    if _metrics_started:
+        return
+    try:
+        start_http_server(port)
+        _metrics_started = True
+    except OSError:
+        pass  # Port already in use (previous attempt)
