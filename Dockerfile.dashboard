@@ -11,7 +11,7 @@ RUN npm run build
 FROM python:3.12-slim-bookworm AS backend-builder
 
 WORKDIR /build
-COPY requirements/dashboard.txt requirements/base.txt ./requirements/
+COPY requirements/ ./requirements/
 RUN pip install --no-cache-dir --user -r requirements/dashboard.txt
 
 # Stage 3: Final image
