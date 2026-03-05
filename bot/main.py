@@ -510,16 +510,29 @@ class TradingBot:
 
 async def main() -> None:
     configure_logging()
-    bot = TradingBot()
 
-    try:
-        await bot.start()
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        logger.error("bot_fatal_error", error=str(e))
-    finally:
+    max_retries = 10
+    for attempt in range(1, max_retries + 1):
+        bot = TradingBot()
         try:
-            await bot.stop()
-        except Exception:
-            pass
+            await bot.start()
+            # start() blocks until stream ends — clean exit
+            break
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            logger.error("bot_fatal_error", error=str(e), attempt=attempt)
+        finally:
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+
+        if attempt >= max_retries:
+            logger.critical("max_startup_retries_reached")
+            break
+
+        # Exponential backoff: 30s, 60s, 120s, ... max 300s
+        delay = min(30 * (2 ** (attempt - 1)), 300)
+        logger.info("bot_retry_in", seconds=delay, attempt=attempt)
+        await asyncio.sleep(delay)
