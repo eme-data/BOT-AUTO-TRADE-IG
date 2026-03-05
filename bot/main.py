@@ -482,11 +482,16 @@ class TradingBot:
             logger.error("reconcile_error", error=str(e))
 
     async def _update_account_metrics(self) -> None:
-        """Update account balance metrics."""
+        """Update account balance metrics and publish to Redis for the dashboard."""
         try:
             balance = await self.broker.get_account_balance()
             ACCOUNT_BALANCE.set(balance.get("balance", 0))
             DAILY_PNL.set(balance.get("profit_loss", 0))
+
+            # Publish to Redis so the dashboard doesn't need its own IG session
+            r = await self._get_redis()
+            await r.set("ig:account_info", json.dumps(balance, default=str), ex=120)
+            await r.set("ig:account_balance", str(balance.get("balance", 0)), ex=120)
         except Exception as e:
             logger.error("account_metrics_error", error=str(e))
 

@@ -147,7 +147,13 @@ def _fetch_ig_account_sync(creds: dict, acc_number: str) -> dict | None:
 
 
 async def _get_cached_account(db: AsyncSession) -> dict | None:
-    """Get account info from Redis cache, or fetch from IG (with lock to avoid parallel calls)."""
+    """Get account info from Redis cache, or fetch from IG if bot is not running.
+
+    When the bot is running it maintains its own IG session and publishes
+    account data to Redis.  Creating a *second* IG session from the dashboard
+    can invalidate the bot's session (IG limits concurrent sessions), so we
+    only call the IG API directly when the bot is stopped.
+    """
     r = await get_redis()
 
     # Check cache first (no lock needed for reads)
@@ -155,7 +161,13 @@ async def _get_cached_account(db: AsyncSession) -> dict | None:
     if cached:
         return json.loads(cached)
 
-    # Acquire lock to prevent concurrent IG session creation
+    # If the bot is running, do NOT create a competing IG session.
+    bot_status = await r.get("bot:current_status")
+    if bot_status in ("running", "starting"):
+        log.debug("Bot is running — skipping direct IG API call for account info")
+        return None
+
+    # Bot is not running — safe to call IG directly
     async with _ig_lock:
         # Double-check cache after acquiring lock
         cached = await r.get("ig:account_info")
