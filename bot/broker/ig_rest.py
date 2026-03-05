@@ -37,10 +37,13 @@ def auto_retry(fn: Callable[..., Any]) -> Callable[..., Any]:
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
+                # Quota/allowance errors are NOT retryable — raise immediately
+                if "exceeded" in err_str or "allowance" in err_str:
+                    raise
                 is_session_error = any(
                     kw in err_str
                     for kw in ("invalid session", "not logged in", "unauthorized",
-                               "client token", "security token", "403", "401")
+                               "client token", "security token", "401")
                 )
                 if is_session_error and attempt < self.MAX_RETRIES - 1:
                     logger.warning("ig_session_error_retrying", attempt=attempt + 1, error=str(e))

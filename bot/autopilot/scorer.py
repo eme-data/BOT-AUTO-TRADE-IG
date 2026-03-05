@@ -28,24 +28,28 @@ class MarketScorer:
 
         for tf in ("HOUR", "HOUR_4", "DAY"):
             try:
-                bars = await self.broker.get_historical_prices(epic, tf, 100)
-                if len(bars) < 50:
+                bars = await self.broker.get_historical_prices(epic, tf, 50)
+                if len(bars) < 30:
                     logger.warning("score_insufficient_bars", epic=epic, tf=tf, bars=len(bars))
                     continue
                 df = self._bars_to_df(bars)
                 df = add_all_indicators(df)
                 scores_by_tf[tf] = self._score_timeframe(df)
                 self._consecutive_errors = 0  # reset on success
-                await asyncio.sleep(4)  # rate limit spacing (IG allows ~30 req/min for LIVE)
+                await asyncio.sleep(4)  # rate limit spacing
             except Exception as e:
                 err_str = str(e).lower()
-                is_api_error = any(kw in err_str for kw in ("401", "403", "security token", "session expired", "exceeded"))
+                # Quota exceeded → abort immediately, don't waste more calls
+                if "exceeded" in err_str or "allowance" in err_str:
+                    logger.error("score_quota_exceeded", epic=epic, tf=tf)
+                    raise
+                is_api_error = any(kw in err_str for kw in ("401", "security token", "session expired"))
                 logger.warning("score_tf_error", epic=epic, tf=tf, error=str(e), api_error=is_api_error)
                 if is_api_error:
                     self._consecutive_errors = getattr(self, "_consecutive_errors", 0) + 1
                     if self._consecutive_errors >= 3:
                         logger.error("score_session_dead", errors=self._consecutive_errors)
-                        raise  # abort cycle — session/API dead
+                        raise
 
         if not scores_by_tf:
             logger.warning("score_no_data", epic=epic, instrument=instrument_name)

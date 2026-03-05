@@ -75,13 +75,13 @@ class AutoPilotSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AUTOPILOT_")
 
     enabled: bool = False
-    scan_interval_minutes: int = 30
+    scan_interval_minutes: int = 60
     max_active_markets: int = 3
     min_score_threshold: float = 0.35
     universe_mode: str = "discovery"
-    search_terms: str = "EUR/USD,GBP/USD,USD/JPY,US 500,FTSE 100,Germany 40,Gold,Oil"
+    search_terms: str = "EUR/USD,GBP/USD,US 500,Gold"
     prefer_trend_following: bool = True
-    api_budget_per_cycle: int = 30
+    api_budget_per_cycle: int = 15
 
 
 class Settings(BaseSettings):
