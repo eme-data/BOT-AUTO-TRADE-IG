@@ -28,8 +28,43 @@ from dashboard.api.schemas import HealthResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await _ensure_admin_account()
     yield
     await close_redis()
+
+
+async def _ensure_admin_account():
+    """Create the initial admin account from ADMIN_USERNAME/ADMIN_PASSWORD env vars."""
+    import logging
+    import os
+
+    from sqlalchemy import func, select
+
+    from bot.db.models import AdminUser
+    from bot.db.session import async_session_factory
+    from dashboard.api.auth.jwt import hash_password
+
+    log = logging.getLogger(__name__)
+    username = os.environ.get("ADMIN_USERNAME", "").strip()
+    password = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if not username or not password:
+        return
+
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(select(func.count(AdminUser.id)))
+            if result.scalar_one() > 0:
+                return
+
+            user = AdminUser(
+                username=username,
+                hashed_password=hash_password(password),
+            )
+            session.add(user)
+            await session.commit()
+            log.info("Admin account '%s' created from environment variables.", username)
+    except Exception as exc:
+        log.warning("Could not auto-create admin account: %s", exc)
 
 
 app = FastAPI(
