@@ -76,8 +76,9 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
-# Installation (Ubuntu 24.04)
+# Installation (Ubuntu 22/24 — must be run as root)
 install:
+	@if [ "$$(id -u)" -ne 0 ]; then echo "Run as root: sudo make install"; exit 1; fi
 	bash scripts/install.sh
 
 # Frontend
