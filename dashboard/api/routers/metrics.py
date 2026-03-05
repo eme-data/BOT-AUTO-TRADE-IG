@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Query
@@ -13,6 +15,9 @@ from dashboard.api.schemas import AccountResponse, MetricsResponse
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 log = logging.getLogger(__name__)
+
+# Lock to prevent concurrent IG session creation
+_ig_lock = asyncio.Lock()
 
 
 @router.get("", response_model=MetricsResponse)
@@ -114,14 +119,8 @@ async def get_pnl_history(
     return history
 
 
-async def _fetch_ig_balance(db: AsyncSession, redis) -> float:
-    """Fetch account balance from IG and cache it for 60 seconds."""
-    from dashboard.api.routers.settings import get_ig_credentials
-
-    creds = await get_ig_credentials(db)
-    if not creds.get("api_key") or not creds.get("username"):
-        return 0.0
-
+def _fetch_ig_account_sync(creds: dict, acc_number: str) -> dict | None:
+    """Synchronous IG API call — runs in a thread to avoid blocking the event loop."""
     from trading_ig import IGService
 
     ig = IGService(
@@ -135,18 +134,59 @@ async def _fetch_ig_balance(db: AsyncSession, redis) -> float:
     accounts = ig.fetch_accounts()
     ig.logout()
 
-    # Find preferred account or the configured one
-    acc_number = creds.get("acc_number", "")
-    balance = 0.0
     for _, row in accounts.iterrows():
-        if acc_number and row.get("accountId") == acc_number:
-            balance = float(row.get("balance", 0))
-            break
-        if row.get("preferred", False):
-            balance = float(row.get("balance", 0))
+        if (acc_number and row.get("accountId") == acc_number) or row.get("preferred", False):
+            return {
+                "balance": float(row.get("balance", 0)),
+                "deposit": float(row.get("deposit", 0)),
+                "profit_loss": float(row.get("profitLoss", 0)),
+                "available": float(row.get("available", 0)),
+                "currency": str(row.get("currency", "EUR")),
+            }
+    return None
 
-    await redis.set("ig:account_balance", str(balance), ex=60)
-    return balance
+
+async def _get_cached_account(db: AsyncSession) -> dict | None:
+    """Get account info from Redis cache, or fetch from IG (with lock to avoid parallel calls)."""
+    r = await get_redis()
+
+    # Check cache first (no lock needed for reads)
+    cached = await r.get("ig:account_info")
+    if cached:
+        return json.loads(cached)
+
+    # Acquire lock to prevent concurrent IG session creation
+    async with _ig_lock:
+        # Double-check cache after acquiring lock
+        cached = await r.get("ig:account_info")
+        if cached:
+            return json.loads(cached)
+
+        from dashboard.api.routers.settings import get_ig_credentials
+
+        creds = await get_ig_credentials(db)
+        if not creds.get("api_key") or not creds.get("username"):
+            return None
+
+        acc_number = creds.get("acc_number", "")
+
+        # Run synchronous IG call in thread pool
+        loop = asyncio.get_event_loop()
+        account_data = await loop.run_in_executor(
+            None, _fetch_ig_account_sync, creds, acc_number
+        )
+
+        if account_data:
+            await r.set("ig:account_info", json.dumps(account_data), ex=60)
+            await r.set("ig:account_balance", str(account_data["balance"]), ex=60)
+
+        return account_data
+
+
+async def _fetch_ig_balance(db: AsyncSession, redis) -> float:
+    """Fetch account balance from IG (uses shared cache)."""
+    account_data = await _get_cached_account(db)
+    return account_data["balance"] if account_data else 0.0
 
 
 @router.get("/account", response_model=AccountResponse)
@@ -155,39 +195,10 @@ async def get_account(
     _user: AdminUser = Depends(get_current_user),
 ):
     """Get IG account details (balance, deposit, available, P&L)."""
-    from dashboard.api.routers.settings import get_ig_credentials
-
-    creds = await get_ig_credentials(db)
-    if not creds.get("api_key") or not creds.get("username"):
-        return AccountResponse()
-
     try:
-        from trading_ig import IGService
-
-        ig = IGService(
-            creds["username"],
-            creds["password"],
-            creds["api_key"],
-            creds.get("acc_type", "DEMO"),
-            use_rate_limiter=True,
-        )
-        ig.create_session(version="2")
-        accounts = ig.fetch_accounts()
-        ig.logout()
-
-        acc_number = creds.get("acc_number", "")
-        for _, row in accounts.iterrows():
-            if (acc_number and row.get("accountId") == acc_number) or row.get("preferred", False):
-                r = await get_redis()
-                balance = float(row.get("balance", 0))
-                await r.set("ig:account_balance", str(balance), ex=60)
-                return AccountResponse(
-                    balance=balance,
-                    deposit=float(row.get("deposit", 0)),
-                    profit_loss=float(row.get("profitLoss", 0)),
-                    available=float(row.get("available", 0)),
-                    currency=str(row.get("currency", "EUR")),
-                )
+        account_data = await _get_cached_account(db)
+        if account_data:
+            return AccountResponse(**account_data)
     except Exception as exc:
         log.warning("Could not fetch IG account: %s", exc)
 
