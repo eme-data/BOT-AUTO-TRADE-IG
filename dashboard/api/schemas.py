@@ -81,3 +81,36 @@ class HealthResponse(BaseModel):
     db: str = "unknown"
     redis: str = "unknown"
     bot: str = "unknown"
+
+
+class AutoPilotScoreResponse(BaseModel):
+    epic: str
+    instrument_name: str = ""
+    total_score: float = 0.0
+    trend_score: float = 0.0
+    momentum_score: float = 0.0
+    volatility_score: float = 0.0
+    regime: str = "neutral"
+    direction_bias: str = "neutral"
+    timeframe_alignment: float = 0.0
+    selected_strategy: str | None = None
+    is_active: bool = False
+    scored_at: str = ""
+
+
+class AutoPilotStatusResponse(BaseModel):
+    enabled: bool = False
+    status: str = "disabled"
+    last_scan: str | None = None
+    active_markets: int = 0
+    scores: list[AutoPilotScoreResponse] = []
+
+
+class AutoPilotConfigRequest(BaseModel):
+    enabled: bool | None = None
+    scan_interval_minutes: int | None = None
+    max_active_markets: int | None = None
+    min_score_threshold: float | None = None
+    universe_mode: str | None = None
+    search_terms: str | None = None
+    api_budget_per_cycle: int | None = None

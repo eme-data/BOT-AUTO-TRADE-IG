@@ -12,6 +12,7 @@ import RiskSettings from './pages/RiskSettings'
 import Logs from './pages/Logs'
 import Notifications from './pages/Notifications'
 import Backtest from './pages/Backtest'
+import AutoPilot from './pages/AutoPilot'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, needsSetup } = useAuth()
@@ -92,6 +93,7 @@ function App() {
           <div className="flex items-center gap-6">
             <NavLink to="/" end className={navLinkClass}>Dashboard</NavLink>
             <NavLink to="/trades" className={navLinkClass}>Trades</NavLink>
+            <NavLink to="/autopilot" className={navLinkClass}>Auto-Pilot</NavLink>
             <NavLink to="/backtest" className={navLinkClass}>Backtest</NavLink>
             <NavLink to="/logs" className={navLinkClass}>Logs</NavLink>
             <SettingsDropdown />
@@ -113,6 +115,7 @@ function App() {
           <Route path="/ig-settings" element={<ProtectedRoute><IGSettings /></ProtectedRoute>} />
           <Route path="/markets" element={<ProtectedRoute><Markets /></ProtectedRoute>} />
           <Route path="/risk" element={<ProtectedRoute><RiskSettings /></ProtectedRoute>} />
+          <Route path="/autopilot" element={<ProtectedRoute><AutoPilot /></ProtectedRoute>} />
           <Route path="/backtest" element={<ProtectedRoute><Backtest /></ProtectedRoute>} />
           <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

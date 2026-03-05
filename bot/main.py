@@ -35,6 +35,8 @@ from bot.notifications import load_telegram_settings, notify_bot_status, notify_
 from bot.risk.manager import RiskManager
 from bot.risk.models import RiskConfig
 from bot.risk.trailing_stop import TrailingStopManager
+from bot.autopilot.manager import AutoPilotManager
+from bot.autopilot.models import AutoPilotConfig
 from bot.strategies.macd_trend import MACDTrendStrategy
 from bot.strategies.registry import StrategyRegistry
 from bot.strategies.rsi_mean_reversion import RSIMeanReversionStrategy
@@ -84,6 +86,7 @@ class TradingBot:
         self._redis: aioredis.Redis | None = None
         self._command_task: asyncio.Task | None = None
         self._log_buffer: deque[dict] = deque(maxlen=500)
+        self.autopilot: AutoPilotManager | None = None
 
     async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
@@ -150,6 +153,16 @@ class TradingBot:
                         await self._publish_log("INFO", "Reloading settings from DB...")
                         await load_settings_from_db()
                         await self._publish_log("INFO", "Settings reloaded")
+                    elif command == "autopilot_toggle":
+                        enabled = data.get("enabled", False)
+                        if enabled:
+                            await self._enable_autopilot()
+                        else:
+                            await self._disable_autopilot()
+                    elif command == "autopilot_scan_now":
+                        if self.autopilot:
+                            await self._publish_log("INFO", "Auto-Pilot: manual scan triggered")
+                            await self.autopilot.run_scan_cycle()
                 except json.JSONDecodeError:
                     pass
         except asyncio.CancelledError:
@@ -205,6 +218,9 @@ class TradingBot:
         self.scheduler.add_job(self._refresh_calendar, "interval", hours=6, id="refresh_calendar")
         self.scheduler.start()
 
+        # Initialize Auto-Pilot if enabled
+        await self._init_autopilot()
+
         self._running = True
         await self._publish_status("running")
         await self._publish_log("INFO", f"Bot started with {len(self.registry.get_enabled())} strategies, {len(epics)} epics")
@@ -221,6 +237,9 @@ class TradingBot:
         """Stop the trading bot gracefully."""
         logger.info("bot_stopping")
         self._running = False
+        if self.autopilot:
+            await self.autopilot.deactivate_all()
+            self.autopilot = None
         if self._command_task and not self._command_task.done():
             self._command_task.cancel()
         self.scheduler.shutdown(wait=False)
@@ -233,6 +252,47 @@ class TradingBot:
             await self._redis.aclose()
             self._redis = None
         logger.info("bot_stopped")
+
+    async def _init_autopilot(self) -> None:
+        """Initialize autopilot if enabled in settings."""
+        if settings.autopilot.enabled:
+            await self._enable_autopilot()
+
+    async def _enable_autopilot(self) -> None:
+        """Enable autopilot mode."""
+        r = await self._get_redis()
+        ap_config = AutoPilotConfig(
+            enabled=True,
+            scan_interval_minutes=settings.autopilot.scan_interval_minutes,
+            max_active_markets=settings.autopilot.max_active_markets,
+            min_score_threshold=settings.autopilot.min_score_threshold,
+            universe_mode=settings.autopilot.universe_mode,
+            search_terms=[t.strip() for t in settings.autopilot.search_terms.split(",") if t.strip()],
+            api_budget_per_cycle=settings.autopilot.api_budget_per_cycle,
+        )
+        self.autopilot = AutoPilotManager(self.broker, self.registry, ap_config, r)
+
+        # Schedule scan job
+        if self.scheduler.get_job("autopilot_scan"):
+            self.scheduler.remove_job("autopilot_scan")
+        self.scheduler.add_job(
+            self.autopilot.run_scan_cycle,
+            "interval",
+            minutes=ap_config.scan_interval_minutes,
+            id="autopilot_scan",
+        )
+        # Run first scan immediately
+        asyncio.create_task(self.autopilot.run_scan_cycle())
+        await self._publish_log("INFO", f"Auto-Pilot enabled (scan every {ap_config.scan_interval_minutes}min, max {ap_config.max_active_markets} markets)")
+
+    async def _disable_autopilot(self) -> None:
+        """Disable autopilot mode."""
+        if self.autopilot:
+            await self.autopilot.deactivate_all()
+            self.autopilot = None
+        if self.scheduler.get_job("autopilot_scan"):
+            self.scheduler.remove_job("autopilot_scan")
+        await self._publish_log("INFO", "Auto-Pilot disabled, all autopilot strategies removed")
 
     async def _load_strategies(self) -> None:
         """Load strategies from database or register defaults."""

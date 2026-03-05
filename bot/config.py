@@ -71,12 +71,26 @@ class DashboardSettings(BaseSettings):
     secret_key: str = "change-me"
 
 
+class AutoPilotSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AUTOPILOT_")
+
+    enabled: bool = False
+    scan_interval_minutes: int = 30
+    max_active_markets: int = 3
+    min_score_threshold: float = 0.5
+    universe_mode: str = "watchlist"
+    search_terms: str = "EUR/USD,GBP/USD,USD/JPY,US 500,FTSE 100,Germany 40,Gold,Oil"
+    prefer_trend_following: bool = True
+    api_budget_per_cycle: int = 30
+
+
 class Settings(BaseSettings):
     ig: IGSettings = IGSettings()
     db: DatabaseSettings = DatabaseSettings()
     redis: RedisSettings = RedisSettings()
     bot: BotSettings = BotSettings()
     dashboard: DashboardSettings = DashboardSettings()
+    autopilot: AutoPilotSettings = AutoPilotSettings()
 
 
 settings = Settings()
@@ -101,6 +115,13 @@ _DB_KEY_MAP: dict[str, tuple[str, str, type]] = {
     "bot_default_stop_distance": ("bot", "default_stop_distance", int),
     "bot_default_limit_distance": ("bot", "default_limit_distance", int),
     "bot_log_level": ("bot", "log_level", str),
+    "autopilot_enabled": ("autopilot", "enabled", lambda v: v.lower() in ("true", "1", "yes")),
+    "autopilot_scan_interval_minutes": ("autopilot", "scan_interval_minutes", int),
+    "autopilot_max_active_markets": ("autopilot", "max_active_markets", int),
+    "autopilot_min_score_threshold": ("autopilot", "min_score_threshold", float),
+    "autopilot_universe_mode": ("autopilot", "universe_mode", str),
+    "autopilot_search_terms": ("autopilot", "search_terms", str),
+    "autopilot_api_budget_per_cycle": ("autopilot", "api_budget_per_cycle", int),
 }
 
 

@@ -12,6 +12,7 @@ from sqlalchemy import text
 from dashboard.api.deps import close_redis, get_redis
 from dashboard.api.routers import (
     auth,
+    autopilot,
     backtest,
     bot_control,
     markets,
@@ -95,6 +96,7 @@ app.include_router(markets.router)
 app.include_router(bot_control.router)
 app.include_router(notifications.router)
 app.include_router(backtest.router)
+app.include_router(autopilot.router)
 app.include_router(ws.router)
 
 
