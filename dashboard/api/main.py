@@ -22,6 +22,7 @@ from dashboard.api.routers import (
     settings,
     strategies,
     trades,
+    users,
     ws,
 )
 from dashboard.api.schemas import HealthResponse
@@ -96,6 +97,7 @@ app.include_router(markets.router)
 app.include_router(bot_control.router)
 app.include_router(notifications.router)
 app.include_router(backtest.router)
+app.include_router(users.router)
 app.include_router(autopilot.router)
 app.include_router(ws.router)
 

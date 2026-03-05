@@ -13,6 +13,7 @@ import Logs from './pages/Logs'
 import Notifications from './pages/Notifications'
 import Backtest from './pages/Backtest'
 import AutoPilot from './pages/AutoPilot'
+import UserManagement from './pages/UserManagement'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, needsSetup } = useAuth()
@@ -57,6 +58,7 @@ function SettingsDropdown() {
           <NavLink to="/settings" className={linkClass} onClick={() => setOpen(false)}>Strategies</NavLink>
           <NavLink to="/risk" className={linkClass} onClick={() => setOpen(false)}>Risk & Bot</NavLink>
           <NavLink to="/notifications" className={linkClass} onClick={() => setOpen(false)}>Notifications</NavLink>
+          <NavLink to="/users" className={linkClass} onClick={() => setOpen(false)}>Users</NavLink>
         </div>
       )}
     </div>
@@ -119,6 +121,7 @@ function App() {
           <Route path="/backtest" element={<ProtectedRoute><Backtest /></ProtectedRoute>} />
           <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

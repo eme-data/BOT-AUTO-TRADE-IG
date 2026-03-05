@@ -119,19 +119,23 @@ async def get_me(user: AdminUser = Depends(get_current_user)):
     return UserResponse(username=user.username)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.post("/change-password")
 async def change_password(
-    current_password: str,
-    new_password: str,
+    req: ChangePasswordRequest,
     user: AdminUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Change admin password."""
-    if not verify_password(current_password, user.hashed_password):
+    if not verify_password(req.current_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if len(new_password) < 8:
+    if len(req.new_password) < 8:
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
 
-    user.hashed_password = hash_password(new_password)
+    user.hashed_password = hash_password(req.new_password)
     await db.commit()
     return {"message": "Password changed successfully"}
