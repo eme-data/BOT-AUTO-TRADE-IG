@@ -114,8 +114,8 @@ export default function AutoPilot() {
     try {
       const res = await apiFetch(`/api/autopilot/toggle?enabled=${newEnabled}`, { method: 'POST' })
       if (res.ok) {
-        setMessage({ type: 'success', text: `Auto-Pilot ${newEnabled ? 'enabled' : 'disabled'}` })
-        setTimeout(fetchStatus, 1000)
+        setMessage({ type: 'success', text: newEnabled ? 'Auto-Pilot enabled — scanning markets automatically...' : 'Auto-Pilot disabled' })
+        setTimeout(fetchStatus, newEnabled ? 5000 : 1000)
       }
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message })
@@ -262,12 +262,12 @@ export default function AutoPilot() {
           <div>
             <label className="block text-xs text-gray-400 mb-1">Universe Mode</label>
             <select
-              value={editConfig.universe_mode ?? 'watchlist'}
+              value={editConfig.universe_mode ?? 'discovery'}
               onChange={(e) => setEditConfig({ ...editConfig, universe_mode: e.target.value })}
               className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white text-sm"
             >
+              <option value="discovery">Discovery (Recommended)</option>
               <option value="watchlist">Watchlist</option>
-              <option value="discovery">Discovery</option>
             </select>
           </div>
           <div className="col-span-2">
@@ -347,10 +347,9 @@ export default function AutoPilot() {
       {/* Empty state */}
       {(!status?.scores || status.scores.length === 0) && status?.enabled && (
         <div className="bg-bg-card rounded-lg border border-gray-700 p-8 text-center text-gray-400">
-          <p>No market scores yet. Click "Scan Now" or wait for the next automatic scan.</p>
+          <p>No market scores yet. A scan was triggered automatically and results will appear shortly.</p>
           <p className="text-xs mt-2">
-            Make sure you have markets in your watchlist (Config &rarr; Markets)
-            or switch to Discovery mode.
+            Discovery mode searches for markets automatically using the configured search terms.
           </p>
         </div>
       )}

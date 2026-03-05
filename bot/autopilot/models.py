@@ -31,7 +31,7 @@ class AutoPilotConfig:
     scan_interval_minutes: int = 30
     max_active_markets: int = 3
     min_score_threshold: float = 0.5
-    universe_mode: str = "watchlist"  # watchlist or discovery
+    universe_mode: str = "discovery"  # watchlist or discovery
     search_terms: list[str] = field(
         default_factory=lambda: [
             "EUR/USD", "GBP/USD", "USD/JPY",

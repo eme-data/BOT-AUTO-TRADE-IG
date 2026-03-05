@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import AdminUser, AppSetting
+from bot.db.models import AdminUser, AppSetting, WatchedMarket
 from dashboard.api.auth.jwt import get_current_user
 from dashboard.api.deps import get_db, get_redis
 from dashboard.api.schemas import (
@@ -91,12 +91,39 @@ async def toggle_autopilot(
         ))
     await db.commit()
 
+    # If enabling, auto-set discovery mode when no watchlist markets exist
+    if enabled:
+        wl_result = await db.execute(
+            select(WatchedMarket).where(WatchedMarket.enabled.is_(True)).limit(1)
+        )
+        has_watchlist = wl_result.scalar_one_or_none() is not None
+
+        if not has_watchlist:
+            # Auto-switch to discovery mode so it works out of the box
+            mode_result = await db.execute(
+                select(AppSetting).where(AppSetting.key == "autopilot_universe_mode")
+            )
+            mode_setting = mode_result.scalar_one_or_none()
+            if mode_setting:
+                mode_setting.value = "discovery"
+            else:
+                db.add(AppSetting(
+                    key="autopilot_universe_mode",
+                    value="discovery",
+                    category="autopilot",
+                ))
+            await db.commit()
+
     # Send command to bot via Redis
     r = await get_redis()
     await r.publish(
         "bot:commands",
         json.dumps({"command": "autopilot_toggle", "enabled": enabled}),
     )
+
+    # Auto-trigger a scan immediately when enabling
+    if enabled:
+        await r.publish("bot:commands", json.dumps({"command": "autopilot_scan_now"}))
 
     return {"enabled": enabled, "message": f"Auto-Pilot {'enabled' if enabled else 'disabled'}"}
 
@@ -127,7 +154,7 @@ async def get_autopilot_config(
         "scan_interval_minutes": int(settings_map.get("autopilot_scan_interval_minutes", "30")),
         "max_active_markets": int(settings_map.get("autopilot_max_active_markets", "3")),
         "min_score_threshold": float(settings_map.get("autopilot_min_score_threshold", "0.5")),
-        "universe_mode": settings_map.get("autopilot_universe_mode", "watchlist"),
+        "universe_mode": settings_map.get("autopilot_universe_mode", "discovery"),
         "search_terms": settings_map.get(
             "autopilot_search_terms",
             "EUR/USD,GBP/USD,USD/JPY,US 500,FTSE 100,Germany 40,Gold,Oil",
