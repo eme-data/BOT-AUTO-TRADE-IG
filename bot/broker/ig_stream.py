@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import Callable
 
 import structlog
+from lightstreamer.client import Subscription, SubscriptionListener
 from trading_ig import IGService, IGStreamService
-from trading_ig.lightstreamer import Subscription
 
 from bot.broker.models import Tick
 from bot.config import settings
@@ -18,6 +18,45 @@ logger = structlog.get_logger()
 MAX_RECONNECT_ATTEMPTS = 50
 RECONNECT_BASE_DELAY = 5  # seconds
 KEEPALIVE_INTERVAL = 30  # seconds
+
+
+class _MarketListener(SubscriptionListener):
+    """Listener for market price updates."""
+
+    def __init__(self, callback: Callable[[dict], None]):
+        self._callback = callback
+
+    def onItemUpdate(self, update):
+        self._callback({
+            "name": update.getItemName(),
+            "values": update.getChangedFields(),
+        })
+
+
+class _TradeListener(SubscriptionListener):
+    """Listener for trade confirmations."""
+
+    def __init__(self, callback: Callable[[dict], None]):
+        self._callback = callback
+
+    def onItemUpdate(self, update):
+        self._callback({
+            "name": update.getItemName(),
+            "values": update.getChangedFields(),
+        })
+
+
+class _AccountListener(SubscriptionListener):
+    """Listener for account balance updates."""
+
+    def __init__(self, callback: Callable[[dict], None]):
+        self._callback = callback
+
+    def onItemUpdate(self, update):
+        self._callback({
+            "name": update.getItemName(),
+            "values": update.getChangedFields(),
+        })
 
 
 class IGStreamClient:
@@ -83,7 +122,7 @@ class IGStreamClient:
         self._subscriptions.append(sub_info)
 
         sub = Subscription(mode="MERGE", items=items, fields=fields)
-        sub.addlistener(self._on_market_update)
+        sub.addListener(_MarketListener(self._on_market_update))
 
         await asyncio.get_event_loop().run_in_executor(
             None, self._stream.ls_client.subscribe, sub
@@ -97,7 +136,7 @@ class IGStreamClient:
         fields = ["CONFIRMS", "OPU", "WOU"]
 
         sub = Subscription(mode="DISTINCT", items=items, fields=fields)
-        sub.addlistener(self._on_trade_update)
+        sub.addListener(_TradeListener(self._on_trade_update))
 
         await asyncio.get_event_loop().run_in_executor(
             None, self._stream.ls_client.subscribe, sub
@@ -111,7 +150,7 @@ class IGStreamClient:
         fields = ["FUNDS", "PNL", "DEPOSIT", "AVAILABLE_TO_DEAL", "EQUITY"]
 
         sub = Subscription(mode="MERGE", items=items, fields=fields)
-        sub.addlistener(self._on_account_update)
+        sub.addListener(_AccountListener(self._on_account_update))
 
         await asyncio.get_event_loop().run_in_executor(
             None, self._stream.ls_client.subscribe, sub
