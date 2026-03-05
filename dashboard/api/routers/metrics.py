@@ -171,9 +171,8 @@ async def _get_cached_account(db: AsyncSession) -> dict | None:
         acc_number = creds.get("acc_number", "")
 
         # Run synchronous IG call in thread pool
-        loop = asyncio.get_event_loop()
-        account_data = await loop.run_in_executor(
-            None, _fetch_ig_account_sync, creds, acc_number
+        account_data = await asyncio.to_thread(
+            _fetch_ig_account_sync, creds, acc_number
         )
 
         if account_data:
