@@ -54,7 +54,7 @@ class MarketScanner:
     async def _discovery_scan(self, config: AutoPilotConfig) -> list[MarketInfo]:
         """Discover markets by searching IG with configured terms."""
         seen_epics: set[str] = set()
-        markets: list[MarketInfo] = []
+        all_markets: list[MarketInfo] = []
 
         rejected_types: dict[str, int] = {}
         for term in config.search_terms:
@@ -69,7 +69,7 @@ class MarketScanner:
                         rejected_types[info.instrument_type] = rejected_types.get(info.instrument_type, 0) + 1
                         continue
                     seen_epics.add(info.epic)
-                    markets.append(info)
+                    all_markets.append(info)
                 await asyncio.sleep(1.5)
             except Exception as e:
                 logger.warning("discovery_scan_error", term=term, error=str(e))
@@ -77,9 +77,37 @@ class MarketScanner:
         if rejected_types:
             logger.info("discovery_rejected_types", rejected=rejected_types)
 
-        # Log instrument types found for debugging
+        # Deduplicate: keep only one variant per underlying market
+        # Group by base name (strip "Mini", "Forward", size suffixes)
+        markets = self._deduplicate_markets(all_markets)
+
         type_counts: dict[str, int] = {}
         for m in markets:
             type_counts[m.instrument_type] = type_counts.get(m.instrument_type, 0) + 1
-        logger.info("discovery_scan_complete", terms=len(config.search_terms), tradeable=len(markets), types=type_counts)
+        logger.info("discovery_scan_complete", terms=len(config.search_terms), raw=len(all_markets), deduplicated=len(markets), types=type_counts)
         return markets
+
+    @staticmethod
+    def _deduplicate_markets(markets: list[MarketInfo]) -> list[MarketInfo]:
+        """Keep one instrument per underlying market (prefer Mini/smallest deal size)."""
+        import re
+        groups: dict[str, list[MarketInfo]] = {}
+        for m in markets:
+            # Normalize name: remove "Mini", "(1€)", "(50$)", "(250$)", "Cash", "au comptant" etc.
+            base = re.sub(r'\s*(Mini|Forward|Cash|au comptant)\s*', ' ', m.instrument_name)
+            base = re.sub(r'\s*\([^)]*\)\s*', ' ', base)  # remove parenthetical like (1€)
+            base = base.strip()
+            if base not in groups:
+                groups[base] = []
+            groups[base].append(m)
+
+        result: list[MarketInfo] = []
+        for base, variants in groups.items():
+            # Prefer "Mini" variant (smaller deal size), otherwise first one
+            mini = [v for v in variants if "mini" in v.instrument_name.lower()]
+            chosen = mini[0] if mini else variants[0]
+            result.append(chosen)
+            if len(variants) > 1:
+                logger.debug("dedup_market", base=base, kept=chosen.epic, dropped=[v.epic for v in variants if v != chosen])
+
+        return result
