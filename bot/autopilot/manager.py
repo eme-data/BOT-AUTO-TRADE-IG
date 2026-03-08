@@ -61,12 +61,12 @@ class AutoPilotManager:
             scores: list[MarketScore] = []
 
             for market in candidates:
-                if api_budget < 3:
+                if api_budget < 2:
                     await self._log_activity("WARN", "API budget exhausted, stopping scoring")
                     break
                 score = await self.scorer.score_market(market.epic, market.instrument_name)
                 scores.append(score)
-                api_budget -= 3
+                api_budget -= 2  # 2 timeframes per market (HOUR + DAY)
                 await self._log_activity(
                     "INFO",
                     f"Scored {market.instrument_name or market.epic}: {score.total_score:.0%} ({score.regime})",

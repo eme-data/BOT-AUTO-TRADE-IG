@@ -12,8 +12,9 @@ from bot.data.indicators import add_all_indicators
 
 logger = structlog.get_logger()
 
-# Timeframe weights: daily most important, then H4, then H1
-TF_WEIGHTS = {"DAY": 0.40, "HOUR_4": 0.35, "HOUR": 0.25}
+# Timeframe weights: daily most important, then H1
+# Using 2 TFs instead of 3 to conserve IG historical data quota
+TF_WEIGHTS = {"DAY": 0.55, "HOUR": 0.45}
 
 
 class MarketScorer:
@@ -26,7 +27,7 @@ class MarketScorer:
         """Fetch H1/H4/D1 data and compute composite score."""
         scores_by_tf: dict[str, dict] = {}
 
-        for tf in ("HOUR", "HOUR_4", "DAY"):
+        for tf in ("HOUR", "DAY"):
             try:
                 bars = await self.broker.get_historical_prices(epic, tf, 50)
                 if len(bars) < 30:
