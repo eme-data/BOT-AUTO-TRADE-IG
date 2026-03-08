@@ -169,3 +169,42 @@ async def load_settings_from_db() -> None:
             log.warning("Failed to apply DB setting %s: %s", row.key, exc)
 
     log.info("Loaded %d settings from database", applied)
+
+    # Ensure optimal autopilot defaults exist in DB
+    await _ensure_autopilot_defaults()
+
+
+_AUTOPILOT_DEFAULTS = {
+    "autopilot_scan_interval_minutes": ("60", "autopilot"),
+    "autopilot_min_score_threshold": ("0.35", "autopilot"),
+    "autopilot_search_terms": ("EUR/USD,GBP/USD,US 500,Gold", "autopilot"),
+    "autopilot_api_budget_per_cycle": ("15", "autopilot"),
+    "autopilot_max_active_markets": ("3", "autopilot"),
+}
+
+
+async def _ensure_autopilot_defaults() -> None:
+    """Insert optimal autopilot settings into DB if they don't exist yet,
+    or update them if they have known-bad values from earlier versions."""
+    from sqlalchemy import select
+
+    from bot.db.models import AppSetting
+    from bot.db.session import async_session_factory
+
+    async with async_session_factory() as session:
+        for key, (default_value, category) in _AUTOPILOT_DEFAULTS.items():
+            result = await session.execute(
+                select(AppSetting).where(AppSetting.key == key)
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                # Key doesn't exist — insert default
+                session.add(AppSetting(
+                    key=key, value=default_value, category=category, encrypted=False,
+                ))
+                log.info("Inserted default autopilot setting: %s = %s", key, default_value)
+            elif key == "autopilot_search_terms" and existing.value and existing.value.count(",") > 5:
+                # Too many search terms from old config — reduce to save quota
+                existing.value = default_value
+                log.info("Updated autopilot search_terms (was too long): %s", default_value)
+        await session.commit()
