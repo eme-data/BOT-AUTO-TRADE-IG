@@ -151,15 +151,15 @@ async def get_autopilot_config(
 
     return {
         "enabled": settings_map.get("autopilot_enabled", "false").lower() in ("true", "1"),
-        "scan_interval_minutes": int(settings_map.get("autopilot_scan_interval_minutes", "30")),
+        "scan_interval_minutes": int(settings_map.get("autopilot_scan_interval_minutes", "60")),
         "max_active_markets": int(settings_map.get("autopilot_max_active_markets", "3")),
-        "min_score_threshold": float(settings_map.get("autopilot_min_score_threshold", "0.5")),
+        "min_score_threshold": float(settings_map.get("autopilot_min_score_threshold", "0.35")),
         "universe_mode": settings_map.get("autopilot_universe_mode", "discovery"),
         "search_terms": settings_map.get(
             "autopilot_search_terms",
-            "EUR/USD,GBP/USD,USD/JPY,US 500,FTSE 100,Germany 40,Gold,Oil",
+            "EUR/USD,GBP/USD,US 500,Gold",
         ),
-        "api_budget_per_cycle": int(settings_map.get("autopilot_api_budget_per_cycle", "30")),
+        "api_budget_per_cycle": int(settings_map.get("autopilot_api_budget_per_cycle", "15")),
     }
 
 

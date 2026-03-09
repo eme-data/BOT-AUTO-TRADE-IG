@@ -170,8 +170,19 @@ async def load_settings_from_db() -> None:
 
     log.info("Loaded %d settings from database", applied)
 
-    # Ensure optimal autopilot defaults exist in DB
-    await _ensure_autopilot_defaults()
+    # Ensure optimal autopilot defaults exist in DB, then re-apply corrected values
+    corrected = await _ensure_autopilot_defaults()
+    if corrected:
+        for key, value in corrected.items():
+            mapping = _DB_KEY_MAP.get(key)
+            if mapping:
+                section_attr, field_name, cast_fn = mapping
+                try:
+                    section = getattr(settings, section_attr)
+                    setattr(section, field_name, cast_fn(value))
+                    log.info("Applied corrected setting in memory: %s = %s", key, value)
+                except Exception:
+                    pass
 
 
 _AUTOPILOT_DEFAULTS = {
@@ -183,9 +194,11 @@ _AUTOPILOT_DEFAULTS = {
 }
 
 
-async def _ensure_autopilot_defaults() -> None:
+async def _ensure_autopilot_defaults() -> dict[str, str]:
     """Insert optimal autopilot settings into DB if they don't exist yet,
-    or update them if they have known-bad values from earlier versions."""
+    or update them if they have known-bad values from earlier versions.
+
+    Returns a dict of {key: corrected_value} for any values that were changed."""
     from sqlalchemy import select
 
     from bot.db.models import AppSetting
@@ -199,6 +212,8 @@ async def _ensure_autopilot_defaults() -> None:
         "autopilot_min_score_threshold": lambda v: v and float(v) > 0.40,
     }
 
+    corrected: dict[str, str] = {}
+
     async with async_session_factory() as session:
         for key, (default_value, category) in _AUTOPILOT_DEFAULTS.items():
             result = await session.execute(
@@ -210,13 +225,17 @@ async def _ensure_autopilot_defaults() -> None:
                 session.add(AppSetting(
                     key=key, value=default_value, category=category, encrypted=False,
                 ))
+                corrected[key] = default_value
                 log.info("Inserted default autopilot setting: %s = %s", key, default_value)
             elif key in _FORCE_UPDATE:
                 try:
                     if _FORCE_UPDATE[key](existing.value):
                         old_val = existing.value
                         existing.value = default_value
+                        corrected[key] = default_value
                         log.info("Updated autopilot setting %s: %s -> %s", key, old_val, default_value)
                 except (ValueError, TypeError):
                     pass
         await session.commit()
+
+    return corrected
