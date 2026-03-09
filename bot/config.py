@@ -191,6 +191,14 @@ async def _ensure_autopilot_defaults() -> None:
     from bot.db.models import AppSetting
     from bot.db.session import async_session_factory
 
+    # Values that are known-bad from earlier versions and should be force-updated
+    _FORCE_UPDATE = {
+        "autopilot_scan_interval_minutes": lambda v: v and int(v) < 60,
+        "autopilot_search_terms": lambda v: v and v.count(",") > 4,
+        "autopilot_api_budget_per_cycle": lambda v: v and int(v) > 15,
+        "autopilot_min_score_threshold": lambda v: v and float(v) > 0.40,
+    }
+
     async with async_session_factory() as session:
         for key, (default_value, category) in _AUTOPILOT_DEFAULTS.items():
             result = await session.execute(
@@ -203,8 +211,12 @@ async def _ensure_autopilot_defaults() -> None:
                     key=key, value=default_value, category=category, encrypted=False,
                 ))
                 log.info("Inserted default autopilot setting: %s = %s", key, default_value)
-            elif key == "autopilot_search_terms" and existing.value and existing.value.count(",") > 5:
-                # Too many search terms from old config — reduce to save quota
-                existing.value = default_value
-                log.info("Updated autopilot search_terms (was too long): %s", default_value)
+            elif key in _FORCE_UPDATE:
+                try:
+                    if _FORCE_UPDATE[key](existing.value):
+                        old_val = existing.value
+                        existing.value = default_value
+                        log.info("Updated autopilot setting %s: %s -> %s", key, old_val, default_value)
+                except (ValueError, TypeError):
+                    pass
         await session.commit()

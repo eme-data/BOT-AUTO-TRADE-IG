@@ -28,16 +28,14 @@ class AutoPilotConfig:
     """Configuration for the auto-pilot mode."""
 
     enabled: bool = False
-    scan_interval_minutes: int = 30
+    scan_interval_minutes: int = 60
     max_active_markets: int = 3
-    min_score_threshold: float = 0.5
+    min_score_threshold: float = 0.35
     universe_mode: str = "discovery"  # watchlist or discovery
     search_terms: list[str] = field(
         default_factory=lambda: [
-            "EUR/USD", "GBP/USD", "USD/JPY",
-            "US 500", "FTSE 100", "Germany 40",
-            "Gold", "Oil",
+            "EUR/USD", "GBP/USD", "US 500", "Gold",
         ]
     )
     prefer_trend_following: bool = True
-    api_budget_per_cycle: int = 30
+    api_budget_per_cycle: int = 15
