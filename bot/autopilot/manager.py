@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import redis.asyncio as aioredis
 import structlog
@@ -33,10 +33,21 @@ class AutoPilotManager:
         self.selector = StrategySelector()
         self._last_scores: list[MarketScore] = []
         self._active_strategies: dict[str, str] = {}  # epic -> strategy registry name
+        self._quota_backoff_until: datetime | None = None  # skip scans until this time
 
     async def run_scan_cycle(self) -> None:
         """Main autopilot cycle: scan -> score -> select -> activate."""
         if not self.config.enabled:
+            return
+
+        # Skip scan if we're in quota backoff mode
+        if self._quota_backoff_until and datetime.utcnow() < self._quota_backoff_until:
+            remaining = (self._quota_backoff_until - datetime.utcnow()).total_seconds() / 3600
+            logger.info("autopilot_quota_backoff", hours_remaining=f"{remaining:.1f}")
+            await self._log_activity(
+                "WARN",
+                f"Skipping scan — IG quota exhausted, retrying in {remaining:.1f}h",
+            )
             return
 
         logger.info("autopilot_scan_start")
@@ -117,8 +128,18 @@ class AutoPilotManager:
             await self._log_activity("INFO", f"Scan complete: {len(self._active_strategies)} active strategies")
 
         except Exception as e:
-            logger.error("autopilot_scan_error", error=str(e))
-            await self._log_activity("ERROR", f"Scan error: {e}")
+            err_str = str(e).lower()
+            if "exceeded" in err_str or "allowance" in err_str:
+                # IG quota exhausted — back off for 6 hours instead of retrying every cycle
+                self._quota_backoff_until = datetime.utcnow() + timedelta(hours=6)
+                logger.warning("autopilot_quota_backoff_set", until=self._quota_backoff_until.isoformat())
+                await self._log_activity(
+                    "ERROR",
+                    f"IG historical data quota exhausted — pausing scans for 6h (until {self._quota_backoff_until.strftime('%H:%M')} UTC)",
+                )
+            else:
+                logger.error("autopilot_scan_error", error=str(e))
+                await self._log_activity("ERROR", f"Scan error: {e}")
             await self._set_status("error")
 
     async def _activate_market(self, score: MarketScore) -> None:
