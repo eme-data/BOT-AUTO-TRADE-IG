@@ -2,20 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApiFetch } from '../context/AuthContext'
 import { useWebSocket } from '../hooks/useWebSocket'
 
-const STATUS_COLORS: Record<string, string> = {
-  running: 'bg-profit',
-  starting: 'bg-yellow-400',
-  stopped: 'bg-gray-500',
-  error: 'bg-loss',
-  unknown: 'bg-gray-600',
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  running: 'Running',
-  starting: 'Starting...',
-  stopped: 'Stopped',
-  error: 'Error',
-  unknown: '...',
+const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string; label: string }> = {
+  running: { color: 'text-profit', bg: 'bg-profit/15', dot: 'bg-profit animate-pulse', label: 'Running' },
+  starting: { color: 'text-yellow-400', bg: 'bg-yellow-400/15', dot: 'bg-yellow-400 animate-pulse', label: 'Starting...' },
+  stopped: { color: 'text-gray-400', bg: 'bg-gray-600/20', dot: 'bg-gray-500', label: 'Stopped' },
+  error: { color: 'text-loss', bg: 'bg-loss/15', dot: 'bg-loss', label: 'Error' },
+  unknown: { color: 'text-gray-500', bg: 'bg-gray-600/20', dot: 'bg-gray-600', label: '...' },
 }
 
 export default function BotStatusIndicator() {
@@ -47,10 +39,12 @@ export default function BotStatusIndicator() {
     return () => clearInterval(interval)
   }, [apiFetch])
 
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.unknown
+
   return (
-    <div className="flex items-center gap-1.5">
-      <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[status] || STATUS_COLORS.unknown}`} />
-      <span className="text-xs text-gray-400">{STATUS_LABELS[status] || status}</span>
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${cfg.bg}`}>
+      <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+      <span className={`text-xs font-medium ${cfg.color}`}>{cfg.label}</span>
     </div>
   )
 }

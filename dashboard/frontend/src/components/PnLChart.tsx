@@ -15,20 +15,20 @@ export default function PnLChart({ data }: Props) {
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { color: '#1e293b' },
-        textColor: '#94a3b8',
+        background: { color: '#1a2332' },
+        textColor: '#6b7280',
       },
       grid: {
-        vertLines: { color: '#334155' },
-        horzLines: { color: '#334155' },
+        vertLines: { color: '#1e293b' },
+        horzLines: { color: '#1e293b' },
       },
       width: containerRef.current.clientWidth,
       height: 300,
       rightPriceScale: {
-        borderColor: '#334155',
+        borderColor: '#1e293b',
       },
       timeScale: {
-        borderColor: '#334155',
+        borderColor: '#1e293b',
       },
     })
 
@@ -64,8 +64,8 @@ export default function PnLChart({ data }: Props) {
   }, [data])
 
   return (
-    <div className="bg-bg-card rounded-lg border border-gray-700 p-4">
-      <h3 className="text-sm font-medium text-gray-400 mb-3">P&L Over Time</h3>
+    <div className="card p-4">
+      <h3 className="section-title mb-3">Cumulative P&L</h3>
       <div ref={containerRef} />
     </div>
   )

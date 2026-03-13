@@ -88,38 +88,38 @@ export default function Backtest() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold">Backtesting</h2>
+      <h2 className="text-xl font-semibold text-white">Backtesting</h2>
 
       {/* Configuration */}
-      <div className="bg-bg-card rounded-lg border border-gray-700 p-4">
+      <div className="card p-4">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Strategy</label>
+            <label className="block text-xs text-gray-500 mb-1">Strategy</label>
             <select
               value={strategy}
               onChange={(e) => setStrategy(e.target.value)}
-              className="w-full bg-bg-primary border border-gray-700 rounded px-3 py-2 text-sm"
+              className="input"
             >
               <option value="macd_trend">MACD Trend</option>
               <option value="rsi_mean_reversion">RSI Mean Reversion</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Epic</label>
+            <label className="block text-xs text-gray-500 mb-1">Epic</label>
             <input
               type="text"
               value={epic}
               onChange={(e) => setEpic(e.target.value)}
               placeholder="IX.D.DAX.DAILY.IP"
-              className="w-full bg-bg-primary border border-gray-700 rounded px-3 py-2 text-sm"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Resolution</label>
+            <label className="block text-xs text-gray-500 mb-1">Resolution</label>
             <select
               value={resolution}
               onChange={(e) => setResolution(e.target.value)}
-              className="w-full bg-bg-primary border border-gray-700 rounded px-3 py-2 text-sm"
+              className="input"
             >
               <option value="MINUTE_5">5 min</option>
               <option value="MINUTE_15">15 min</option>
@@ -129,21 +129,21 @@ export default function Backtest() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Bars</label>
+            <label className="block text-xs text-gray-500 mb-1">Bars</label>
             <input
               type="number"
               value={historyBars}
               onChange={(e) => setHistoryBars(Number(e.target.value))}
-              className="w-full bg-bg-primary border border-gray-700 rounded px-3 py-2 text-sm"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Balance</label>
+            <label className="block text-xs text-gray-500 mb-1">Balance</label>
             <input
               type="number"
               value={initialBalance}
               onChange={(e) => setInitialBalance(Number(e.target.value))}
-              className="w-full bg-bg-primary border border-gray-700 rounded px-3 py-2 text-sm"
+              className="input"
             />
           </div>
         </div>
@@ -151,7 +151,7 @@ export default function Backtest() {
           <button
             onClick={runBacktest}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded text-sm font-medium"
+            className="btn-primary"
           >
             {loading ? 'Running...' : 'Run Backtest'}
           </button>
@@ -180,7 +180,7 @@ export default function Backtest() {
 
           {/* Equity Curve (simple text-based) */}
           {equityCurve.length > 0 && (
-            <div className="bg-bg-card rounded-lg border border-gray-700 p-4">
+            <div className="card p-4">
               <h3 className="text-sm font-medium mb-3">Equity Curve</h3>
               <div className="flex items-end gap-px h-32">
                 {equityCurve
@@ -210,10 +210,10 @@ export default function Backtest() {
 
           {/* Trades Table */}
           {trades.length > 0 && (
-            <div className="bg-bg-card rounded-lg border border-gray-700 overflow-x-auto">
+            <div className="card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-700 text-gray-400 text-xs uppercase">
+                  <tr className="border-b border-border text-gray-500 text-xs uppercase">
                     <th className="text-left px-4 py-3">Entry</th>
                     <th className="text-left px-4 py-3">Exit</th>
                     <th className="text-left px-4 py-3">Dir</th>
@@ -225,13 +225,13 @@ export default function Backtest() {
                 </thead>
                 <tbody>
                   {trades.map((t, i) => (
-                    <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/50">
-                      <td className="px-4 py-2 text-xs text-gray-400">{t.entry_time?.slice(0, 16)}</td>
-                      <td className="px-4 py-2 text-xs text-gray-400">{t.exit_time?.slice(0, 16)}</td>
+                    <tr key={i} className="border-b border-border/50 hover:bg-bg-hover/50 transition-colors">
+                      <td className="px-4 py-2 text-xs text-gray-500">{t.entry_time?.slice(0, 16)}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{t.exit_time?.slice(0, 16)}</td>
                       <td className="px-4 py-2">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          t.direction === 'BUY' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss'
-                        }`}>
+                        <span className={
+                          t.direction === 'BUY' ? 'badge-profit' : 'badge-loss'
+                        }>
                           {t.direction}
                         </span>
                       </td>
@@ -240,7 +240,7 @@ export default function Backtest() {
                       <td className={`px-4 py-2 text-right font-medium ${t.profit >= 0 ? 'text-profit' : 'text-loss'}`}>
                         {t.profit >= 0 ? '+' : ''}{t.profit}
                       </td>
-                      <td className="px-4 py-2 text-xs text-gray-400">{t.reason}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{t.reason}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -256,8 +256,8 @@ export default function Backtest() {
 function SummaryCard({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
   const color = positive === undefined ? 'text-white' : positive ? 'text-profit' : 'text-loss'
   return (
-    <div className="bg-bg-card rounded-lg border border-gray-700 p-4">
-      <div className="text-xs text-gray-400 mb-1">{label}</div>
+    <div className="card p-4">
+      <div className="text-xs text-gray-500 mb-1">{label}</div>
       <div className={`text-lg font-bold ${color}`}>{value}</div>
     </div>
   )

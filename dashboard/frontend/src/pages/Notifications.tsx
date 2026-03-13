@@ -83,11 +83,11 @@ export default function Notifications() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h2 className="text-lg font-semibold">Notifications (Telegram)</h2>
+      <h2 className="text-xl font-semibold text-white">Notifications (Telegram)</h2>
 
       {message && (
         <div
-          className={`rounded px-4 py-2 text-sm ${
+          className={`rounded-lg px-4 py-2 text-sm ${
             message.type === 'success' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss'
           }`}
         >
@@ -95,37 +95,37 @@ export default function Notifications() {
         </div>
       )}
 
-      <div className="bg-bg-card rounded-lg border border-gray-700 p-6 space-y-4">
-        <p className="text-sm text-gray-400">
+      <div className="card p-6 space-y-4">
+        <p className="text-sm text-gray-500">
           Get notified on Telegram when trades are opened/closed and when the bot starts/stops.
         </p>
 
         {configured && (
-          <div className="bg-blue-600/10 text-blue-400 text-sm rounded px-4 py-2">
+          <div className="bg-blue-600/10 text-blue-400 text-sm rounded-lg px-4 py-2">
             Bot token is configured. Leave empty to keep current value.
           </div>
         )}
 
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Bot Token</label>
+          <label className="block text-sm text-gray-500 mb-1">Bot Token</label>
           <input
             type="password"
             value={botToken}
             onChange={(e) => setBotToken(e.target.value)}
             placeholder={configured ? '***configured***' : 'e.g., 123456:ABC-DEF...'}
-            className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+            className="input"
           />
           <p className="text-xs text-gray-600 mt-1">Create a bot via @BotFather on Telegram</p>
         </div>
 
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Chat ID</label>
+          <label className="block text-sm text-gray-500 mb-1">Chat ID</label>
           <input
             type="text"
             value={chatId}
             onChange={(e) => setChatId(e.target.value)}
             placeholder="e.g., -1001234567890"
-            className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+            className="input"
           />
           <p className="text-xs text-gray-600 mt-1">Your personal chat ID or a group chat ID</p>
         </div>
@@ -134,14 +134,14 @@ export default function Notifications() {
           <button
             onClick={handleTest}
             disabled={testing || (!botToken && !configured) || !chatId}
-            className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
+            className="bg-bg-hover hover:bg-bg-hover/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
             {testing ? 'Sending...' : 'Send Test Message'}
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
+            className="btn-primary"
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>

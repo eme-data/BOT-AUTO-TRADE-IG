@@ -1,23 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+@layer base {
+  body {
+    @apply bg-bg-primary text-gray-200 antialiased;
+    margin: 0;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
 }
 
-@keyframes slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
+@layer components {
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400
+           hover:text-white hover:bg-bg-hover transition-all duration-150;
   }
-  to {
-    transform: translateX(0);
-    opacity: 1;
+  .sidebar-link.active {
+    @apply text-white bg-accent/10 text-accent;
   }
-}
-
-.animate-slide-in {
-  animation: slide-in 0.3s ease-out;
+  .card {
+    @apply bg-bg-card rounded-xl border border-border shadow-card;
+  }
+  .badge {
+    @apply text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+  .badge-profit {
+    @apply badge bg-profit/15 text-profit;
+  }
+  .badge-loss {
+    @apply badge bg-loss/15 text-loss;
+  }
+  .badge-warning {
+    @apply badge bg-warning/15 text-warning;
+  }
+  .badge-accent {
+    @apply badge bg-accent/15 text-accent;
+  }
+  .badge-neutral {
+    @apply badge bg-gray-600/30 text-gray-400;
+  }
+  .input {
+    @apply w-full bg-bg-primary border border-border-light rounded-lg px-3 py-2 text-white text-sm
+           focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors;
+  }
+  .btn-primary {
+    @apply bg-accent hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply bg-loss/20 hover:bg-loss/30 text-loss px-4 py-2 rounded-lg text-sm font-medium transition-colors;
+  }
+  .btn-success {
+    @apply bg-profit/20 hover:bg-profit/30 text-profit px-4 py-2 rounded-lg text-sm font-medium transition-colors;
+  }
+  .section-title {
+    @apply text-xs font-semibold text-gray-500 uppercase tracking-wider;
+  }
 }

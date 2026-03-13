@@ -121,17 +121,17 @@ export default function RiskSettings() {
   const statusColor: Record<string, string> = {
     running: 'bg-profit/20 text-profit',
     starting: 'bg-yellow-500/20 text-yellow-400',
-    stopped: 'bg-gray-700 text-gray-400',
+    stopped: 'bg-bg-hover text-gray-400',
     error: 'bg-loss/20 text-loss',
   }
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h2 className="text-lg font-semibold">Risk Management & Bot Control</h2>
+      <h2 className="text-xl font-semibold text-white">Risk Management & Bot Control</h2>
 
       {message && (
         <div
-          className={`rounded px-4 py-2 text-sm ${
+          className={`rounded-lg px-4 py-2 text-sm ${
             message.type === 'success' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss'
           }`}
         >
@@ -140,12 +140,12 @@ export default function RiskSettings() {
       )}
 
       {/* Bot Control */}
-      <div className="bg-bg-card rounded-lg border border-gray-700 p-6">
-        <h3 className="text-sm font-medium text-gray-400 mb-4">Bot Control</h3>
+      <div className="card p-6">
+        <h3 className="section-title mb-4">Bot Control</h3>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">Status:</span>
-            <span className={`px-3 py-1 rounded text-sm font-medium ${statusColor[botStatus.status] || statusColor.stopped}`}>
+            <span className="text-sm text-gray-500">Status:</span>
+            <span className={`px-3 py-1 rounded-lg text-sm font-medium ${statusColor[botStatus.status] || statusColor.stopped}`}>
               {botStatus.status.toUpperCase()}
             </span>
           </div>
@@ -153,20 +153,20 @@ export default function RiskSettings() {
             <button
               onClick={() => sendBotCommand('start')}
               disabled={botStatus.status === 'running'}
-              className="bg-profit/20 text-profit hover:bg-profit/30 px-4 py-2 rounded text-sm disabled:opacity-30"
+              className="btn-success disabled:opacity-30"
             >
               Start
             </button>
             <button
               onClick={() => sendBotCommand('stop')}
               disabled={botStatus.status === 'stopped'}
-              className="bg-loss/20 text-loss hover:bg-loss/30 px-4 py-2 rounded text-sm disabled:opacity-30"
+              className="btn-danger disabled:opacity-30"
             >
               Stop
             </button>
             <button
               onClick={() => sendBotCommand('restart')}
-              className="bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 px-4 py-2 rounded text-sm"
+              className="bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 px-4 py-2 rounded-lg text-sm font-medium"
             >
               Restart
             </button>
@@ -175,8 +175,8 @@ export default function RiskSettings() {
       </div>
 
       {/* Risk Parameters */}
-      <div className="bg-bg-card rounded-lg border border-gray-700 p-6 space-y-4">
-        <h3 className="text-sm font-medium text-gray-400 mb-2">Risk Parameters</h3>
+      <div className="card p-6 space-y-4">
+        <h3 className="section-title mb-2">Risk Parameters</h3>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Max Daily Loss" value={maxDailyLoss} onChange={setMaxDailyLoss} suffix="EUR" />
@@ -192,7 +192,7 @@ export default function RiskSettings() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors disabled:opacity-50 mt-2"
+          className="btn-primary mt-2"
         >
           {saving ? 'Saving...' : 'Save Risk Settings'}
         </button>
@@ -215,15 +215,15 @@ function Field({
   const isInvalid = isNaN(Number(value)) || value.trim() === ''
   return (
     <div>
-      <label className="block text-sm text-gray-400 mb-1">{label}</label>
+      <label className="block text-sm text-gray-500 mb-1">{label}</label>
       <div className="flex items-center gap-2">
         <input
           type="number"
           step="any"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`w-full bg-bg-primary border rounded px-3 py-2 text-white focus:outline-none ${
-            isInvalid ? 'border-loss focus:border-loss' : 'border-gray-600 focus:border-blue-500'
+          className={`input ${
+            isInvalid ? '!border-loss focus:!border-loss' : ''
           }`}
         />
         {suffix && <span className="text-xs text-gray-500 whitespace-nowrap">{suffix}</span>}

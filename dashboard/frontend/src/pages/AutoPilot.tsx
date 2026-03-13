@@ -39,7 +39,7 @@ interface Config {
 function ScoreBar({ value, color }: { value: number; color: string }) {
   const width = Math.round(value * 100)
   return (
-    <div className="w-full bg-gray-700 rounded-full h-2">
+    <div className="w-full bg-border rounded-full h-2">
       <div className={`h-2 rounded-full ${color}`} style={{ width: `${width}%` }} />
     </div>
   )
@@ -59,22 +59,24 @@ function barColor(score: number): string {
 
 function regimeBadge(regime: string) {
   const colors: Record<string, string> = {
-    trending: 'bg-blue-600/20 text-blue-400',
+    trending: 'badge-accent',
     ranging: 'bg-purple-600/20 text-purple-400',
-    volatile: 'bg-orange-600/20 text-orange-400',
-    neutral: 'bg-gray-600/20 text-gray-400',
+    volatile: 'badge-warning',
+    neutral: 'badge-neutral',
   }
+  const cls = colors[regime] || colors.neutral
+  const isUtility = cls.startsWith('badge-')
   return (
-    <span className={`text-xs px-2 py-0.5 rounded ${colors[regime] || colors.neutral}`}>
+    <span className={isUtility ? cls : `text-xs px-2 py-0.5 rounded-full ${cls}`}>
       {regime}
     </span>
   )
 }
 
 function directionBadge(dir: string) {
-  if (dir === 'bullish') return <span className="text-xs text-profit">Bullish</span>
-  if (dir === 'bearish') return <span className="text-xs text-loss">Bearish</span>
-  return <span className="text-xs text-gray-500">Neutral</span>
+  if (dir === 'bullish') return <span className="badge-profit">Bullish</span>
+  if (dir === 'bearish') return <span className="badge-loss">Bearish</span>
+  return <span className="badge-neutral">Neutral</span>
 }
 
 export default function AutoPilot() {
@@ -167,7 +169,7 @@ export default function AutoPilot() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">Auto-Pilot</h1>
+          <h1 className="text-xl font-semibold text-white">Auto-Pilot</h1>
           <p className="text-sm text-gray-400 mt-1">
             Autonomous market scanning, analysis, and trading
           </p>
@@ -181,11 +183,7 @@ export default function AutoPilot() {
           </div>
           <button
             onClick={handleToggle}
-            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              status?.enabled
-                ? 'bg-loss/20 text-loss hover:bg-loss/30'
-                : 'bg-profit/20 text-profit hover:bg-profit/30'
-            }`}
+            className={status?.enabled ? 'btn-danger' : 'btn-success'}
           >
             {status?.enabled ? 'Disable' : 'Enable'} Auto-Pilot
           </button>
@@ -194,7 +192,7 @@ export default function AutoPilot() {
 
       {/* Shadow mode banner */}
       {status?.enabled && status?.shadow_mode && (
-        <div className="rounded px-4 py-2 text-sm bg-yellow-600/20 text-yellow-400 border border-yellow-600/30 flex items-center justify-between">
+        <div className="card px-4 py-2 text-sm bg-yellow-600/20 text-yellow-400 border-yellow-600/30 flex items-center justify-between">
           <span>Shadow Mode active — signals are logged but not executed on the broker</span>
           <button
             onClick={async () => {
@@ -206,7 +204,7 @@ export default function AutoPilot() {
               fetchStatus()
               setMessage({ type: 'success', text: 'Shadow mode disabled — trades will now be executed live!' })
             }}
-            className="ml-4 bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-xs font-medium"
+            className="ml-4 bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded-lg text-xs font-medium"
           >
             Go Live
           </button>
@@ -214,13 +212,13 @@ export default function AutoPilot() {
       )}
 
       {status?.enabled && !status?.shadow_mode && (
-        <div className="rounded px-4 py-2 text-sm bg-profit/20 text-profit border border-profit/30">
+        <div className="card px-4 py-2 text-sm bg-profit/20 text-profit border-profit/30">
           Live Trading active — orders are sent to the broker
         </div>
       )}
 
       {message && (
-        <div className={`rounded px-4 py-2 text-sm ${
+        <div className={`rounded-xl px-4 py-2 text-sm ${
           message.type === 'success' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss'
         }`}>
           {message.text}
@@ -229,7 +227,7 @@ export default function AutoPilot() {
 
       {/* Status bar */}
       {status?.enabled && (
-        <div className="bg-bg-card rounded-lg border border-gray-700 p-4 flex items-center justify-between">
+        <div className="card p-4 flex items-center justify-between">
           <div className="flex gap-6 text-sm">
             <div>
               <span className="text-gray-400">Active markets: </span>
@@ -249,7 +247,7 @@ export default function AutoPilot() {
           <button
             onClick={handleScanNow}
             disabled={scanning}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+            className="btn-primary disabled:opacity-50"
           >
             {scanning ? 'Scanning...' : 'Scan Now'}
           </button>
@@ -257,8 +255,8 @@ export default function AutoPilot() {
       )}
 
       {/* Configuration */}
-      <div className="bg-bg-card rounded-lg border border-gray-700 p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Configuration</h2>
+      <div className="card p-6 space-y-4">
+        <h2 className="section-title">Configuration</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs text-gray-400 mb-1">Scan Interval (min)</label>
@@ -266,7 +264,7 @@ export default function AutoPilot() {
               type="number"
               value={editConfig.scan_interval_minutes ?? 30}
               onChange={(e) => setEditConfig({ ...editConfig, scan_interval_minutes: Number(e.target.value) })}
-              className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white text-sm"
+              className="input w-full"
             />
           </div>
           <div>
@@ -275,7 +273,7 @@ export default function AutoPilot() {
               type="number"
               value={editConfig.max_active_markets ?? 3}
               onChange={(e) => setEditConfig({ ...editConfig, max_active_markets: Number(e.target.value) })}
-              className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white text-sm"
+              className="input w-full"
             />
           </div>
           <div>
@@ -285,7 +283,7 @@ export default function AutoPilot() {
               step="0.05"
               value={editConfig.min_score_threshold ?? 0.5}
               onChange={(e) => setEditConfig({ ...editConfig, min_score_threshold: Number(e.target.value) })}
-              className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white text-sm"
+              className="input w-full"
             />
           </div>
           <div>
@@ -293,7 +291,7 @@ export default function AutoPilot() {
             <select
               value={editConfig.universe_mode ?? 'discovery'}
               onChange={(e) => setEditConfig({ ...editConfig, universe_mode: e.target.value })}
-              className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white text-sm"
+              className="input w-full"
             >
               <option value="discovery">Discovery (Recommended)</option>
               <option value="watchlist">Watchlist</option>
@@ -304,7 +302,7 @@ export default function AutoPilot() {
             <select
               value={editConfig.shadow_mode ? 'shadow' : 'live'}
               onChange={(e) => setEditConfig({ ...editConfig, shadow_mode: e.target.value === 'shadow' })}
-              className={`w-full border rounded px-3 py-2 text-sm ${
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${
                 editConfig.shadow_mode
                   ? 'bg-yellow-900/30 border-yellow-600/50 text-yellow-400'
                   : 'bg-profit/10 border-profit/30 text-profit'
@@ -321,14 +319,14 @@ export default function AutoPilot() {
               value={editConfig.search_terms ?? ''}
               onChange={(e) => setEditConfig({ ...editConfig, search_terms: e.target.value })}
               placeholder="EUR/USD, US 500, Gold..."
-              className="w-full bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white text-sm"
+              className="input w-full"
             />
           </div>
         </div>
         <button
           onClick={handleSaveConfig}
           disabled={saving}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+          className="btn-primary disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save Configuration'}
         </button>
@@ -336,14 +334,14 @@ export default function AutoPilot() {
 
       {/* Market Scores Table */}
       {status?.scores && status.scores.length > 0 && (
-        <div className="bg-bg-card rounded-lg border border-gray-700 p-6">
-          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">
+        <div className="card p-6">
+          <h2 className="section-title mb-4">
             Market Rankings
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-gray-400 text-xs uppercase border-b border-gray-700">
+                <tr className="text-gray-500 text-xs uppercase border-b border-border">
                   <th className="text-left py-2 pr-4">Market</th>
                   <th className="text-right py-2 px-2">Score</th>
                   <th className="text-center py-2 px-2 w-24">Trend</th>
@@ -357,7 +355,7 @@ export default function AutoPilot() {
               </thead>
               <tbody>
                 {status.scores.map((s) => (
-                  <tr key={s.epic} className={`border-b border-gray-800 ${s.is_active ? 'bg-blue-600/5' : ''}`}>
+                  <tr key={s.epic} className={`border-b border-border/50 hover:bg-bg-hover/50 transition-colors ${s.is_active ? 'bg-blue-600/5' : ''}`}>
                     <td className="py-3 pr-4">
                       <div className="font-medium text-white">{s.instrument_name || s.epic}</div>
                       <div className="text-xs text-gray-500">{s.epic}</div>
@@ -375,7 +373,7 @@ export default function AutoPilot() {
                     </td>
                     <td className="text-center px-2">
                       {s.is_active ? (
-                        <span className="text-xs bg-profit/20 text-profit px-2 py-0.5 rounded">Active</span>
+                        <span className="badge-profit">Active</span>
                       ) : (
                         <span className="text-xs text-gray-500">-</span>
                       )}
@@ -390,7 +388,7 @@ export default function AutoPilot() {
 
       {/* Empty state */}
       {(!status?.scores || status.scores.length === 0) && status?.enabled && (
-        <div className="bg-bg-card rounded-lg border border-gray-700 p-8 text-center text-gray-400">
+        <div className="card p-8 text-center text-gray-400">
           <p>No market scores yet. A scan was triggered automatically and results will appear shortly.</p>
           <p className="text-xs mt-2">
             Discovery mode searches for markets automatically using the configured search terms.

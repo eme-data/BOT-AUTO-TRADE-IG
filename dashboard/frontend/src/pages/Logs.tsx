@@ -60,9 +60,9 @@ export default function Logs() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">Live Logs</h2>
+          <h2 className="text-xl font-semibold text-white">Live Logs</h2>
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-profit' : 'bg-loss'}`} />
-          <span className="text-xs text-gray-400">{logs.length} entries</span>
+          <span className="text-xs text-gray-500">{logs.length} entries</span>
         </div>
         <div className="flex items-center gap-3">
           <input
@@ -70,9 +70,9 @@ export default function Logs() {
             placeholder="Filter logs..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="bg-bg-primary border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-48"
+            className="input w-48"
           />
-          <label className="flex items-center gap-1.5 text-xs text-gray-400">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500">
             <input
               type="checkbox"
               checked={autoScroll}
@@ -83,7 +83,7 @@ export default function Logs() {
           </label>
           <button
             onClick={() => setLogs([])}
-            className="text-xs text-gray-500 hover:text-white px-2 py-1 rounded border border-gray-700"
+            className="text-xs text-gray-500 hover:text-white px-2 py-1 rounded border border-border"
           >
             Clear
           </button>
@@ -92,7 +92,7 @@ export default function Logs() {
 
       <div
         ref={containerRef}
-        className="bg-bg-card rounded-lg border border-gray-700 p-4 h-[calc(100vh-220px)] overflow-y-auto font-mono text-xs"
+        className="card p-4 h-[calc(100vh-220px)] overflow-y-auto font-mono text-xs"
       >
         {filteredLogs.length === 0 ? (
           <div className="text-gray-500 text-center py-12">
@@ -100,7 +100,7 @@ export default function Logs() {
           </div>
         ) : (
           filteredLogs.map((entry, i) => (
-            <div key={i} className="flex gap-3 py-0.5 hover:bg-gray-800/50 px-1 rounded">
+            <div key={i} className="flex gap-3 py-0.5 hover:bg-bg-hover/50 px-1 rounded">
               <span className="text-gray-600 whitespace-nowrap">{formatTime(entry.time)}</span>
               <span className={`font-medium w-16 ${LEVEL_COLORS[entry.level] || 'text-gray-400'}`}>
                 {entry.level}

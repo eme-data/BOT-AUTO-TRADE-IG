@@ -84,11 +84,11 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold">Strategies Configuration</h2>
+      <h2 className="text-xl font-semibold text-white">Strategies Configuration</h2>
 
       {message && (
         <div
-          className={`rounded px-4 py-2 text-sm ${
+          className={`rounded-lg px-4 py-2 text-sm ${
             message.type === 'success' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss'
           }`}
         >
@@ -97,7 +97,7 @@ export default function Settings() {
       )}
 
       {availableEpics.length === 0 && (
-        <div className="bg-yellow-500/10 text-yellow-400 text-sm rounded px-4 py-2">
+        <div className="bg-yellow-500/10 text-yellow-400 text-sm rounded-lg px-4 py-2">
           No markets in watchlist. Go to Markets page to add instruments before configuring strategies.
         </div>
       )}
@@ -107,7 +107,7 @@ export default function Settings() {
       {/* Strategy config editor */}
       <div className="space-y-3">
         {strategies.map((s) => (
-          <div key={s.name} className="bg-bg-card rounded-lg border border-gray-700 p-4">
+          <div key={s.name} className="card p-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-medium">{s.name}</h4>
               <button
@@ -124,7 +124,7 @@ export default function Settings() {
               <div className="space-y-3">
                 {availableEpics.length > 0 && (
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">
+                    <label className="block text-xs text-gray-500 mb-1">
                       Available epics (click to add to config):
                     </label>
                     <div className="flex flex-wrap gap-1">
@@ -141,7 +141,7 @@ export default function Settings() {
                               }
                             } catch { /* */ }
                           }}
-                          className="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600"
+                          className="px-2 py-0.5 bg-bg-hover text-gray-300 rounded text-xs hover:bg-bg-hover/80"
                         >
                           {epic}
                         </button>
@@ -153,12 +153,12 @@ export default function Settings() {
                 <textarea
                   value={editConfig}
                   onChange={(e) => setEditConfig(e.target.value)}
-                  className="w-full h-48 bg-bg-primary border border-gray-600 rounded px-3 py-2 text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+                  className="input h-48 font-mono"
                   spellCheck={false}
                 />
                 <button
                   onClick={saveConfig}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+                  className="btn-primary"
                 >
                   Save Config
                 </button>
