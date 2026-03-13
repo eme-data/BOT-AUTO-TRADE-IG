@@ -11,6 +11,37 @@ from bot.strategies.base import SignalResult
 
 logger = structlog.get_logger()
 
+# ---------------------------------------------------------------------------
+# Correlation groups – epics sharing a group should not be open in the same
+# direction at the same time.  Keys are group names, values are substring
+# patterns matched against the uppercase epic string.
+# ---------------------------------------------------------------------------
+CORRELATION_GROUPS: dict[str, list[str]] = {
+    # FX – USD longs (selling USD): these pairs move together
+    "fx_usd_long": ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD"],
+    # FX – USD shorts (buying USD / safe-haven JPY)
+    "fx_jpy": ["USDJPY", "EURJPY", "GBPJPY", "AUDJPY"],
+    # Commodities – precious metals
+    "precious_metals": ["GOLD", "XAUUSD", "SILVER", "XAGUSD"],
+    # Commodities – energy
+    "energy": ["OIL", "BRENT", "CRUDE", "NGAS"],
+    # US indices
+    "us_indices": ["US500", "SPTRD", "WALL", "DOW", "USTECH", "NDAQ", "US 500", "WALL STREET", "US TECH"],
+    # European indices
+    "eu_indices": ["FTSE", "DAX", "GERMANY", "CAC", "FRANCE"],
+}
+
+
+def _get_correlation_group(epic: str) -> str | None:
+    """Return the correlation group name for *epic*, or None if it doesn't
+    belong to any known group."""
+    epic_upper = epic.upper()
+    for group_name, patterns in CORRELATION_GROUPS.items():
+        for pattern in patterns:
+            if pattern in epic_upper:
+                return group_name
+    return None
+
 
 class RiskManager:
     """Manages risk by validating signals before execution."""
@@ -55,6 +86,23 @@ class RiskManager:
                (signal.signal_type == "SELL" and pos.direction == Direction.BUY):
                 logger.info("risk_opposite_position_exists", epic=signal.epic, direction=pos.direction)
                 return None
+
+        # Check correlation – block same-direction trades on correlated epics
+        signal_group = _get_correlation_group(signal.epic)
+        if signal_group is not None:
+            signal_direction = Direction.BUY if signal.signal_type == "BUY" else Direction.SELL
+            for pos in positions:
+                if pos.epic == signal.epic:
+                    continue  # same-epic is already handled above
+                if _get_correlation_group(pos.epic) == signal_group and pos.direction == signal_direction:
+                    logger.warning(
+                        "risk_correlated_position",
+                        epic=signal.epic,
+                        conflicting_epic=pos.epic,
+                        group=signal_group,
+                        direction=signal_direction.value,
+                    )
+                    return None
 
         # Calculate position size
         size = await self._calculate_size(signal)

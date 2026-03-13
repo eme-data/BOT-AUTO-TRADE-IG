@@ -36,6 +36,39 @@ interface Config {
   shadow_mode: boolean
 }
 
+interface StrategyPerf {
+  strategy_name: string
+  epics: string[]
+  total_trades: number
+  total_pnl: number
+  winning: number
+  losing: number
+  win_rate: number
+}
+
+interface Performance {
+  strategies: StrategyPerf[]
+  overall: {
+    total_trades: number
+    total_pnl: number
+  }
+}
+
+function cleanStrategyName(name: string): string {
+  // Remove "ap_" prefix, then extract the strategy type (before the epic part)
+  // Epic parts typically start with uppercase like CS_D_ or IX_D_ etc.
+  const withoutPrefix = name.replace(/^ap_/, '')
+  // Find where the epic portion starts (uppercase letter followed by _D_ or similar pattern)
+  const epicMatch = withoutPrefix.match(/[_](?=[A-Z]{2,}[._])/)
+  const strategyPart = epicMatch
+    ? withoutPrefix.substring(0, epicMatch.index)
+    : withoutPrefix
+  return strategyPart
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+}
+
 function ScoreBar({ value, color }: { value: number; color: string }) {
   const width = Math.round(value * 100)
   return (
@@ -84,6 +117,7 @@ export default function AutoPilot() {
   const [status, setStatus] = useState<Status | null>(null)
   const [, setConfig] = useState<Config | null>(null)
   const [editConfig, setEditConfig] = useState<Partial<Config>>({})
+  const [performance, setPerformance] = useState<Performance | null>(null)
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -92,6 +126,13 @@ export default function AutoPilot() {
     try {
       const res = await apiFetch('/api/autopilot/status')
       if (res.ok) setStatus(await res.json())
+    } catch { /* */ }
+  }, [apiFetch])
+
+  const fetchPerformance = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/autopilot/performance')
+      if (res.ok) setPerformance(await res.json())
     } catch { /* */ }
   }, [apiFetch])
 
@@ -109,9 +150,10 @@ export default function AutoPilot() {
   useEffect(() => {
     fetchStatus()
     fetchConfig()
-    const interval = setInterval(fetchStatus, 10000)
+    fetchPerformance()
+    const interval = setInterval(() => { fetchStatus(); fetchPerformance() }, 10000)
     return () => clearInterval(interval)
-  }, [fetchStatus, fetchConfig])
+  }, [fetchStatus, fetchConfig, fetchPerformance])
 
   const handleToggle = async () => {
     const newEnabled = !status?.enabled
@@ -380,6 +422,89 @@ export default function AutoPilot() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Strategy Performance */}
+      {performance && performance.strategies.length > 0 && (
+        <div className="card p-6 space-y-4">
+          <h2 className="section-title">Strategy Performance</h2>
+
+          {/* Overall summary */}
+          <div className="flex gap-6 text-sm">
+            <div>
+              <span className="text-gray-400">Total Trades: </span>
+              <span className="text-white font-medium">{performance.overall.total_trades}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Total P&L: </span>
+              <span className={`font-medium ${performance.overall.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                {performance.overall.total_pnl >= 0 ? '+' : ''}{performance.overall.total_pnl.toFixed(2)}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-400">Overall Win Rate: </span>
+              <span className="text-white font-medium">
+                {performance.strategies.reduce((a, s) => a + s.winning, 0) > 0
+                  ? (
+                      (performance.strategies.reduce((a, s) => a + s.winning, 0) /
+                        performance.strategies.reduce((a, s) => a + s.total_trades, 0)) *
+                      100
+                    ).toFixed(1)
+                  : '0.0'}
+                %
+              </span>
+            </div>
+          </div>
+
+          {/* Strategies table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-500 text-xs uppercase border-b border-border">
+                  <th className="text-left py-2 pr-4">Strategy</th>
+                  <th className="text-left py-2 px-2">Epics</th>
+                  <th className="text-right py-2 px-2">Trades</th>
+                  <th className="text-center py-2 px-2 w-32">Win Rate</th>
+                  <th className="text-right py-2 px-2">P&L</th>
+                  <th className="text-right py-2 px-2">Avg P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {performance.strategies.map((s) => {
+                  const avgPnl = s.total_trades > 0 ? s.total_pnl / s.total_trades : 0
+                  return (
+                    <tr key={s.strategy_name} className="border-b border-border/50 hover:bg-bg-hover/50 transition-colors">
+                      <td className="py-3 pr-4 font-medium text-white">
+                        {cleanStrategyName(s.strategy_name)}
+                      </td>
+                      <td className="px-2 text-xs text-gray-400">
+                        {s.epics.join(', ')}
+                      </td>
+                      <td className="text-right px-2 text-white">{s.total_trades}</td>
+                      <td className="px-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-full bg-border rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${s.win_rate >= 50 ? 'bg-profit' : 'bg-loss'}`}
+                              style={{ width: `${s.win_rate}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-300 w-12 text-right">{s.win_rate.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className={`text-right px-2 font-medium ${s.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        {s.total_pnl >= 0 ? '+' : ''}{s.total_pnl.toFixed(2)}
+                      </td>
+                      <td className={`text-right px-2 text-xs ${avgPnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        {avgPnl >= 0 ? '+' : ''}{avgPnl.toFixed(2)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

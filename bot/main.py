@@ -36,6 +36,7 @@ from bot.metrics import (
 from bot.notifications import load_telegram_settings, notify_bot_status, notify_trade_opened
 from bot.risk.manager import RiskManager
 from bot.risk.models import RiskConfig
+from bot.risk.trading_sessions import is_market_open
 from bot.risk.trailing_stop import TrailingStopManager
 from bot.autopilot.manager import AutoPilotManager
 from bot.autopilot.models import AutoPilotConfig
@@ -382,6 +383,12 @@ class TradingBot:
         if self.calendar.is_paused:
             ORDERS_REJECTED.labels(reason="calendar_pause").inc()
             await self._publish_log("WARNING", f"Signal skipped: economic event pause", strategy=strategy_name)
+            return
+
+        # Check trading session hours
+        if not is_market_open(signal.epic):
+            ORDERS_REJECTED.labels(reason="outside_session").inc()
+            await self._publish_log("INFO", f"Signal skipped: outside trading session", strategy=strategy_name, epic=signal.epic)
             return
 
         order = await self.risk_manager.validate_signal(signal)
