@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import AdminUser, AppSetting, WatchedMarket
+from sqlalchemy import func as sa_func
+
+from bot.db.models import AdminUser, AppSetting, Trade, WatchedMarket
 from dashboard.api.auth.jwt import get_current_user
 from dashboard.api.deps import get_db, get_redis
 from dashboard.api.schemas import (
@@ -25,6 +27,7 @@ _AP_SETTING_KEYS = [
     "autopilot_universe_mode",
     "autopilot_search_terms",
     "autopilot_api_budget_per_cycle",
+    "autopilot_shadow_mode",
 ]
 
 
@@ -36,12 +39,13 @@ async def get_autopilot_status(
     """Get autopilot status, scores, and configuration."""
     r = await get_redis()
 
-    # Get enabled from DB
+    # Get enabled and shadow_mode from DB
     result = await db.execute(
-        select(AppSetting).where(AppSetting.key == "autopilot_enabled")
+        select(AppSetting).where(AppSetting.key.in_(["autopilot_enabled", "autopilot_shadow_mode"]))
     )
-    setting = result.scalar_one_or_none()
-    enabled = setting and setting.value.lower() in ("true", "1", "yes")
+    ap_settings = {s.key: s.value for s in result.scalars().all()}
+    enabled = ap_settings.get("autopilot_enabled", "false").lower() in ("true", "1", "yes")
+    shadow_mode = ap_settings.get("autopilot_shadow_mode", "true").lower() in ("true", "1", "yes")
 
     # Get runtime status from Redis
     status = await r.get("autopilot:status") or ("idle" if enabled else "disabled")
@@ -62,6 +66,7 @@ async def get_autopilot_status(
 
     return AutoPilotStatusResponse(
         enabled=enabled,
+        shadow_mode=shadow_mode,
         status=status,
         last_scan=last_scan,
         active_markets=active_count,
@@ -160,6 +165,7 @@ async def get_autopilot_config(
             "EUR/USD,GBP/USD,US 500,Gold",
         ),
         "api_budget_per_cycle": int(settings_map.get("autopilot_api_budget_per_cycle", "15")),
+        "shadow_mode": settings_map.get("autopilot_shadow_mode", "true").lower() in ("true", "1"),
     }
 
 
@@ -204,3 +210,58 @@ async def get_autopilot_activity(
         except (json.JSONDecodeError, TypeError):
             pass
     return entries
+
+
+@router.get("/performance")
+async def get_autopilot_performance(
+    db: AsyncSession = Depends(get_db),
+    _user: AdminUser = Depends(get_current_user),
+):
+    """Get P&L performance breakdown for autopilot-managed strategies."""
+    # Autopilot strategies are prefixed with "ap_"
+    result = await db.execute(
+        select(
+            Trade.strategy_name,
+            Trade.epic,
+            sa_func.count(Trade.id).label("total_trades"),
+            sa_func.sum(Trade.profit).label("total_pnl"),
+            sa_func.count(Trade.id).filter(Trade.profit > 0).label("winning"),
+            sa_func.count(Trade.id).filter(Trade.profit <= 0).label("losing"),
+            sa_func.avg(Trade.profit).label("avg_pnl"),
+        )
+        .where(Trade.strategy_name.like("ap_%"))
+        .group_by(Trade.strategy_name, Trade.epic)
+        .order_by(sa_func.sum(Trade.profit).desc())
+    )
+    rows = result.all()
+
+    strategies: dict[str, dict] = {}
+    for row in rows:
+        name = row.strategy_name
+        if name not in strategies:
+            strategies[name] = {
+                "strategy_name": name,
+                "epics": [],
+                "total_trades": 0,
+                "total_pnl": 0.0,
+                "winning": 0,
+                "losing": 0,
+            }
+        s = strategies[name]
+        s["epics"].append(row.epic)
+        s["total_trades"] += row.total_trades
+        s["total_pnl"] += float(row.total_pnl or 0)
+        s["winning"] += row.winning
+        s["losing"] += row.losing
+
+    for s in strategies.values():
+        s["win_rate"] = round(s["winning"] / s["total_trades"] * 100, 1) if s["total_trades"] else 0
+        s["total_pnl"] = round(s["total_pnl"], 2)
+
+    return {
+        "strategies": list(strategies.values()),
+        "overall": {
+            "total_trades": sum(s["total_trades"] for s in strategies.values()),
+            "total_pnl": round(sum(s["total_pnl"] for s in strategies.values()), 2),
+        },
+    }

@@ -60,6 +60,10 @@ class RSIMeanReversionStrategy(AbstractStrategy):
             "price": round(current_price, 2),
         }
 
+        # Apply score-based size factor from autopilot (defaults to 1.0)
+        size_factor = self.config.get("size_factor", 1.0)
+        effective_size = round(self.config["size"] * size_factor, 2)
+
         # BUY: RSI crosses above oversold AND price above EMA (uptrend)
         if prev_rsi <= self.config["oversold"] < current_rsi and current_price > current_ema:
             return SignalResult(
@@ -68,7 +72,7 @@ class RSIMeanReversionStrategy(AbstractStrategy):
                 confidence=min(1.0, (self.config["oversold"] - prev_rsi + 10) / 30),
                 stop_distance=self.config["stop_distance"],
                 limit_distance=self.config["limit_distance"],
-                size=self.config["size"],
+                size=effective_size,
                 indicators=indicators,
                 reason=f"RSI crossed above {self.config['oversold']} (was {prev_rsi:.1f}), price above EMA",
             )
@@ -81,7 +85,7 @@ class RSIMeanReversionStrategy(AbstractStrategy):
                 confidence=min(1.0, (prev_rsi - self.config["overbought"] + 10) / 30),
                 stop_distance=self.config["stop_distance"],
                 limit_distance=self.config["limit_distance"],
-                size=self.config["size"],
+                size=effective_size,
                 indicators=indicators,
                 reason=f"RSI crossed below {self.config['overbought']} (was {prev_rsi:.1f}), price below EMA",
             )

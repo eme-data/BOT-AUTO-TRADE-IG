@@ -91,12 +91,26 @@ class MarketScanner:
     def _deduplicate_markets(markets: list[MarketInfo]) -> list[MarketInfo]:
         """Keep one instrument per underlying market (prefer Mini/smallest deal size)."""
         import re
+        # Map translated/localized names to canonical English names
+        _NAME_ALIASES = {
+            "or": "gold", "or au comptant": "gold", "spot gold": "gold",
+            "argent": "silver", "argent au comptant": "silver", "spot silver": "silver",
+            "pétrole": "oil", "petrole": "oil", "crude oil": "oil",
+            "us 500": "us 500", "s&p 500": "us 500",
+            "wall street": "wall street", "dow jones": "wall street",
+            "france 40": "france 40", "cac 40": "france 40",
+            "germany 40": "germany 40", "dax 40": "germany 40",
+            "ftse 100": "ftse 100", "uk 100": "ftse 100",
+        }
+
         groups: dict[str, list[MarketInfo]] = {}
         for m in markets:
             # Normalize name: remove "Mini", "(1€)", "(50$)", "(250$)", "Cash", "au comptant" etc.
-            base = re.sub(r'\s*(Mini|Forward|Cash|au comptant)\s*', ' ', m.instrument_name)
+            base = re.sub(r'\s*(Mini|Forward|Cash|au comptant|Spot)\s*', ' ', m.instrument_name, flags=re.IGNORECASE)
             base = re.sub(r'\s*\([^)]*\)\s*', ' ', base)  # remove parenthetical like (1€)
-            base = base.strip()
+            base = re.sub(r'\s+', ' ', base).strip().lower()
+            # Apply alias mapping to unify translated names
+            base = _NAME_ALIASES.get(base, base)
             if base not in groups:
                 groups[base] = []
             groups[base].append(m)

@@ -82,6 +82,7 @@ class AutoPilotSettings(BaseSettings):
     search_terms: str = "EUR/USD,GBP/USD,US 500,Gold"
     prefer_trend_following: bool = True
     api_budget_per_cycle: int = 15
+    shadow_mode: bool = True  # Paper trading: log signals without executing
 
 
 class Settings(BaseSettings):
@@ -122,6 +123,7 @@ _DB_KEY_MAP: dict[str, tuple[str, str, type]] = {
     "autopilot_universe_mode": ("autopilot", "universe_mode", str),
     "autopilot_search_terms": ("autopilot", "search_terms", str),
     "autopilot_api_budget_per_cycle": ("autopilot", "api_budget_per_cycle", int),
+    "autopilot_shadow_mode": ("autopilot", "shadow_mode", lambda v: v.lower() in ("true", "1", "yes")),
 }
 
 
@@ -191,6 +193,7 @@ _AUTOPILOT_DEFAULTS = {
     "autopilot_search_terms": ("EUR/USD,GBP/USD,US 500,Gold", "autopilot"),
     "autopilot_api_budget_per_cycle": ("15", "autopilot"),
     "autopilot_max_active_markets": ("3", "autopilot"),
+    "autopilot_shadow_mode": ("true", "autopilot"),  # Safe default: paper trading ON
 }
 
 

@@ -100,6 +100,7 @@ class AutoPilotScoreResponse(BaseModel):
 
 class AutoPilotStatusResponse(BaseModel):
     enabled: bool = False
+    shadow_mode: bool = True
     status: str = "disabled"
     last_scan: str | None = None
     active_markets: int = 0
@@ -114,3 +115,4 @@ class AutoPilotConfigRequest(BaseModel):
     universe_mode: str | None = None
     search_terms: str | None = None
     api_budget_per_cycle: int | None = None
+    shadow_mode: bool | None = None

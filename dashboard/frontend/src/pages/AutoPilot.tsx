@@ -18,6 +18,7 @@ interface Score {
 
 interface Status {
   enabled: boolean
+  shadow_mode: boolean
   status: string
   last_scan: string | null
   active_markets: number
@@ -32,6 +33,7 @@ interface Config {
   universe_mode: string
   search_terms: string
   api_budget_per_cycle: number
+  shadow_mode: boolean
 }
 
 function ScoreBar({ value, color }: { value: number; color: string }) {
@@ -190,6 +192,33 @@ export default function AutoPilot() {
         </div>
       </div>
 
+      {/* Shadow mode banner */}
+      {status?.enabled && status?.shadow_mode && (
+        <div className="rounded px-4 py-2 text-sm bg-yellow-600/20 text-yellow-400 border border-yellow-600/30 flex items-center justify-between">
+          <span>Shadow Mode active — signals are logged but not executed on the broker</span>
+          <button
+            onClick={async () => {
+              await apiFetch('/api/autopilot/config', {
+                method: 'PUT',
+                body: JSON.stringify({ shadow_mode: false }),
+              })
+              fetchConfig()
+              fetchStatus()
+              setMessage({ type: 'success', text: 'Shadow mode disabled — trades will now be executed live!' })
+            }}
+            className="ml-4 bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-xs font-medium"
+          >
+            Go Live
+          </button>
+        </div>
+      )}
+
+      {status?.enabled && !status?.shadow_mode && (
+        <div className="rounded px-4 py-2 text-sm bg-profit/20 text-profit border border-profit/30">
+          Live Trading active — orders are sent to the broker
+        </div>
+      )}
+
       {message && (
         <div className={`rounded px-4 py-2 text-sm ${
           message.type === 'success' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss'
@@ -268,6 +297,21 @@ export default function AutoPilot() {
             >
               <option value="discovery">Discovery (Recommended)</option>
               <option value="watchlist">Watchlist</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Trading Mode</label>
+            <select
+              value={editConfig.shadow_mode ? 'shadow' : 'live'}
+              onChange={(e) => setEditConfig({ ...editConfig, shadow_mode: e.target.value === 'shadow' })}
+              className={`w-full border rounded px-3 py-2 text-sm ${
+                editConfig.shadow_mode
+                  ? 'bg-yellow-900/30 border-yellow-600/50 text-yellow-400'
+                  : 'bg-profit/10 border-profit/30 text-profit'
+              }`}
+            >
+              <option value="shadow">Shadow (Paper)</option>
+              <option value="live">Live Trading</option>
             </select>
           </div>
           <div className="col-span-2">

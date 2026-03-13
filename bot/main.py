@@ -389,6 +389,12 @@ class TradingBot:
             ORDERS_REJECTED.labels(reason="risk_check").inc()
             return
 
+        # Shadow mode: autopilot strategies log signals without executing
+        is_autopilot = strategy_name.startswith("ap_")
+        if is_autopilot and settings.autopilot.shadow_mode:
+            await self._record_shadow_trade(strategy_name, signal, order)
+            return
+
         try:
             start = time.monotonic()
             result = await self.broker.open_position(order)
@@ -403,6 +409,18 @@ class TradingBot:
                     trade_repo = TradeRepository(session)
                     signal_repo = SignalRepository(session)
 
+                    # Build metadata for autopilot trades (score, regime, etc.)
+                    trade_meta = {}
+                    if strategy_name.startswith("ap_"):
+                        strategy_obj = self.registry.get(strategy_name)
+                        if strategy_obj:
+                            trade_meta = {
+                                "autopilot": True,
+                                "score": strategy_obj.config.get("score"),
+                                "size_factor": strategy_obj.config.get("size_factor"),
+                                "confidence": signal.confidence,
+                            }
+
                     trade = Trade(
                         deal_id=result.deal_id or result.deal_reference,
                         deal_reference=result.deal_reference,
@@ -411,6 +429,7 @@ class TradingBot:
                         size=order.size,
                         strategy_name=strategy_name,
                         status="OPEN",
+                        metadata_=trade_meta,
                     )
                     await trade_repo.create(trade)
 
@@ -456,6 +475,63 @@ class TradingBot:
         except Exception as e:
             logger.error("order_execution_error", error=str(e), epic=order.epic)
             ORDERS_REJECTED.labels(reason="execution_error").inc()
+
+    async def _record_shadow_trade(self, strategy_name: str, signal, order) -> None:
+        """Record a paper trade without executing on the broker."""
+        import uuid
+
+        shadow_id = f"SHADOW-{uuid.uuid4().hex[:12]}"
+        SIGNALS_GENERATED.labels(strategy=strategy_name, signal_type=signal.signal_type).inc()
+
+        async with async_session_factory() as session:
+            trade_repo = TradeRepository(session)
+            signal_repo = SignalRepository(session)
+
+            strategy_obj = self.registry.get(strategy_name)
+            trade_meta = {
+                "autopilot": True,
+                "shadow": True,
+                "score": strategy_obj.config.get("score") if strategy_obj else None,
+                "size_factor": strategy_obj.config.get("size_factor") if strategy_obj else None,
+                "confidence": signal.confidence,
+            }
+
+            trade = Trade(
+                deal_id=shadow_id,
+                deal_reference=shadow_id,
+                epic=order.epic,
+                direction=order.direction.value,
+                size=order.size,
+                strategy_name=strategy_name,
+                status="SHADOW",
+                open_price=signal.indicators.get("price"),
+                metadata_=trade_meta,
+            )
+            await trade_repo.create(trade)
+
+            sig = Signal(
+                epic=signal.epic,
+                strategy_name=strategy_name,
+                signal_type=signal.signal_type,
+                confidence=signal.confidence,
+                indicators=signal.indicators,
+                executed=False,
+                deal_id=shadow_id,
+            )
+            await signal_repo.create(sig)
+
+        await self._publish_log(
+            "INFO",
+            f"[SHADOW] {order.direction.value} {order.size} {order.epic} (score: {signal.confidence:.0%})",
+            strategy=strategy_name,
+        )
+        logger.info(
+            "shadow_trade_recorded",
+            epic=order.epic,
+            direction=order.direction.value,
+            size=order.size,
+            strategy=strategy_name,
+        )
 
     async def _update_bars(self) -> None:
         """Periodically fetch fresh bars from IG and run bar-based strategy evaluation."""

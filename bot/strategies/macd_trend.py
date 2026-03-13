@@ -84,6 +84,10 @@ class MACDTrendStrategy(AbstractStrategy):
         stop_distance = round(current_atr * self.config["atr_multiplier"])
         limit_distance = round(stop_distance * self.config["limit_ratio"])
 
+        # Apply score-based size factor from autopilot (defaults to 1.0)
+        size_factor = self.config.get("size_factor", 1.0)
+        effective_size = round(self.config["size"] * size_factor, 2)
+
         # Bullish crossover: MACD crosses above signal
         if prev_macd <= prev_signal and current_macd > current_signal:
             return SignalResult(
@@ -92,7 +96,7 @@ class MACDTrendStrategy(AbstractStrategy):
                 confidence=min(1.0, abs(current_macd - current_signal) / current_atr) if current_atr > 0 else 0.5,
                 stop_distance=stop_distance,
                 limit_distance=limit_distance,
-                size=self.config["size"],
+                size=effective_size,
                 indicators=indicators,
                 reason="MACD bullish crossover",
             )
@@ -105,7 +109,7 @@ class MACDTrendStrategy(AbstractStrategy):
                 confidence=min(1.0, abs(current_macd - current_signal) / current_atr) if current_atr > 0 else 0.5,
                 stop_distance=stop_distance,
                 limit_distance=limit_distance,
-                size=self.config["size"],
+                size=effective_size,
                 indicators=indicators,
                 reason="MACD bearish crossover",
             )
