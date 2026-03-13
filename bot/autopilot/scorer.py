@@ -37,7 +37,7 @@ class MarketScorer:
                 df = add_all_indicators(df)
                 scores_by_tf[tf] = self._score_timeframe(df)
                 self._consecutive_errors = 0  # reset on success
-                await asyncio.sleep(4)  # rate limit spacing
+                await asyncio.sleep(5)  # rate limit spacing
             except Exception as e:
                 err_str = str(e).lower()
                 # Quota exceeded → abort immediately, don't waste more calls

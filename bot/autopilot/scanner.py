@@ -122,6 +122,6 @@ class MarketScanner:
             chosen = mini[0] if mini else variants[0]
             result.append(chosen)
             if len(variants) > 1:
-                logger.debug("dedup_market", base=base, kept=chosen.epic, dropped=[v.epic for v in variants if v != chosen])
+                logger.info("dedup_market", base=base, kept=chosen.epic, kept_name=chosen.instrument_name, dropped=[v.instrument_name for v in variants if v != chosen])
 
         return result

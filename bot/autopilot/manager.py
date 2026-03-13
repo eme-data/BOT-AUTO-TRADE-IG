@@ -34,6 +34,8 @@ class AutoPilotManager:
         self._last_scores: list[MarketScore] = []
         self._active_strategies: dict[str, str] = {}  # epic -> strategy registry name
         self._quota_backoff_until: datetime | None = None  # skip scans until this time
+        self._score_cache: dict[str, MarketScore] = {}  # epic -> cached score
+        self._score_cache_ttl = timedelta(minutes=30)  # reuse scores within this window
 
     async def run_scan_cycle(self) -> None:
         """Main autopilot cycle: scan -> score -> select -> activate."""
@@ -50,7 +52,13 @@ class AutoPilotManager:
             )
             return
 
-        logger.info("autopilot_scan_start")
+        # Purge expired cache entries
+        now_purge = datetime.utcnow()
+        expired = [k for k, v in self._score_cache.items() if (now_purge - v.scored_at) > self._score_cache_ttl]
+        for k in expired:
+            del self._score_cache[k]
+
+        logger.info("autopilot_scan_start", cache_size=len(self._score_cache))
         await self._set_status("scanning")
         await self._log_activity("INFO", "Scan cycle started")
 
@@ -67,16 +75,29 @@ class AutoPilotManager:
 
             await self._log_activity("INFO", f"Found {len(candidates)} candidate markets")
 
-            # 2. Score each market (respecting API budget)
+            # 2. Score each market (respecting API budget, using cache)
             api_budget = self.config.api_budget_per_cycle
             scores: list[MarketScore] = []
+            now = datetime.utcnow()
 
             for market in candidates:
+                # Check cache first — reuse recent scores to save API quota
+                cached = self._score_cache.get(market.epic)
+                if cached and (now - cached.scored_at) < self._score_cache_ttl:
+                    scores.append(cached)
+                    await self._log_activity(
+                        "INFO",
+                        f"Cached {market.instrument_name or market.epic}: {cached.total_score:.0%} ({cached.regime})",
+                        epic=market.epic,
+                    )
+                    continue
+
                 if api_budget < 2:
                     await self._log_activity("WARN", "API budget exhausted, stopping scoring")
                     break
                 score = await self.scorer.score_market(market.epic, market.instrument_name)
                 scores.append(score)
+                self._score_cache[score.epic] = score  # cache for next cycle
                 api_budget -= 2  # 2 timeframes per market (HOUR + DAY)
                 await self._log_activity(
                     "INFO",
