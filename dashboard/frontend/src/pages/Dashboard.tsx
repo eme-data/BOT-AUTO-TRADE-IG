@@ -6,13 +6,28 @@ import PositionsTable from '../components/PositionsTable'
 import PnLChart from '../components/PnLChart'
 import { useWebSocket } from '../hooks/useWebSocket'
 
+interface MarketScore {
+  epic: string
+  instrument_name: string
+  total_score: number
+  trend_score: number
+  momentum_score: number
+  volatility_score: number
+  timeframe_alignment: number
+  regime: string
+  direction_bias: string
+  selected_strategy: string | null
+  is_active: boolean
+  scored_at: string
+}
+
 interface AutoPilotStatus {
   enabled: boolean
   shadow_mode?: boolean
   status: string
   last_scan: string | null
   active_markets: number
-  scores: { epic: string; instrument_name: string; total_score: number; is_active: boolean; selected_strategy: string | null }[]
+  scores: MarketScore[]
 }
 
 interface ActivityEntry {
@@ -70,6 +85,33 @@ interface PnLPoint {
   trades: number
 }
 
+function ScoreBar({ value, color }: { value: number; color: string }) {
+  const pct = Math.round(value * 100)
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-16 h-2 bg-bg-primary rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs text-gray-400 w-8">{pct}%</span>
+    </div>
+  )
+}
+
+function scoreBarColor(value: number) {
+  if (value >= 0.7) return 'bg-profit'
+  if (value >= 0.5) return 'bg-yellow-400'
+  return 'bg-orange-500'
+}
+
+function regimeBadge(regime: string) {
+  switch (regime) {
+    case 'trending': return 'badge-accent'
+    case 'ranging': return 'badge-warning'
+    case 'volatile': return 'badge-loss'
+    default: return 'badge-neutral'
+  }
+}
+
 export default function Dashboard() {
   const apiFetch = useApiFetch()
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -106,6 +148,10 @@ export default function Dashboard() {
   }
   const fetchAiDecisions = async () => {
     try { const r = await apiFetch('/api/ai/logs?limit=10'); if (r.ok) setAiDecisions(await r.json()) } catch {}
+  }
+
+  const handleScanNow = async () => {
+    try { await apiFetch('/api/autopilot/scan-now', { method: 'POST' }) } catch {}
   }
 
   useEffect(() => {
@@ -157,25 +203,31 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Active autopilot markets */}
-      {autopilot?.enabled && autopilot.scores.some(s => s.is_active) && (
+      {/* Market Ticker Strip */}
+      {autopilot?.enabled && autopilot.scores.length > 0 && (
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="section-title">Active Markets</h3>
-            <NavLink to="/autopilot" className="text-xs text-accent hover:text-blue-300 transition-colors">View all</NavLink>
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" /></svg>
+              <h3 className="text-sm font-medium text-white">Marches suivis</h3>
+            </div>
+            <span className="text-xs text-gray-500">{autopilot.scores.length} paires scannees</span>
           </div>
-          <div className="flex gap-3 flex-wrap">
-            {autopilot.scores.filter(s => s.is_active).map(s => (
-              <div key={s.epic} className="flex items-center gap-2.5 bg-bg-primary rounded-lg px-3 py-2 border border-border">
-                <span className="text-sm font-medium text-white">{s.instrument_name || s.epic}</span>
-                <span className={`text-xs font-bold ${
-                  s.total_score >= 0.7 ? 'text-profit' : s.total_score >= 0.5 ? 'text-yellow-400' : 'text-gray-500'
-                }`}>
-                  {(s.total_score * 100).toFixed(0)}%
-                </span>
-                {s.selected_strategy && (
-                  <span className="badge-neutral">{s.selected_strategy}</span>
-                )}
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {autopilot.scores.map(s => (
+              <div key={s.epic} className={`flex-shrink-0 bg-bg-primary rounded-lg px-4 py-3 border ${s.is_active ? 'border-accent/40' : 'border-border'} min-w-[140px]`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-white truncate">{s.instrument_name || s.epic}</span>
+                  {s.is_active && <span className="w-1.5 h-1.5 rounded-full bg-profit shrink-0" />}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-lg font-bold ${
+                    s.total_score >= 0.6 ? 'text-profit' : s.total_score >= 0.45 ? 'text-yellow-400' : 'text-gray-500'
+                  }`}>
+                    {(s.total_score * 100).toFixed(0)}%
+                  </span>
+                  <span className={`text-[10px] ${regimeBadge(s.regime)}`}>{s.regime}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -184,6 +236,92 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <MetricsCards metrics={metrics} account={account} />
+
+      {/* Autopilot Analysis Table */}
+      {autopilot?.enabled && autopilot.scores.length > 0 && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+              <h3 className="text-sm font-medium text-white">Autopilot - Analyse des tendances</h3>
+              <span className="text-xs text-gray-500">{autopilot.scores.length} paires scannees · {autopilot.active_markets} actives</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">{autopilot.enabled ? 'ON' : 'OFF'}</span>
+                <div className={`w-9 h-5 rounded-full ${autopilot.enabled ? 'bg-profit' : 'bg-gray-600'} flex items-center`}>
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform mx-0.5 ${autopilot.enabled ? 'translate-x-4' : ''}`} />
+                </div>
+              </div>
+              <button onClick={handleScanNow} className="bg-bg-hover hover:bg-bg-hover/80 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                Relancer le scan
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-500 text-xs border-b border-border">
+                  <th className="text-left py-2 px-3 font-medium">Paire</th>
+                  <th className="text-left py-2 px-3 font-medium">Score</th>
+                  <th className="text-left py-2 px-3 font-medium">Tendance</th>
+                  <th className="text-left py-2 px-3 font-medium">Momentum</th>
+                  <th className="text-left py-2 px-3 font-medium">Volatilite</th>
+                  <th className="text-left py-2 px-3 font-medium">Alignement</th>
+                  <th className="text-left py-2 px-3 font-medium">Regime</th>
+                  <th className="text-left py-2 px-3 font-medium">Direction</th>
+                  <th className="text-left py-2 px-3 font-medium">Strategie</th>
+                  <th className="text-left py-2 px-3 font-medium">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {autopilot.scores.map(s => (
+                  <tr key={s.epic} className={`border-b border-border/30 hover:bg-bg-hover/30 transition-colors ${s.is_active ? 'bg-accent/5' : ''}`}>
+                    <td className="py-2.5 px-3">
+                      <span className="text-white font-medium">{s.instrument_name || s.epic}</span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={`font-bold ${
+                        s.total_score >= 0.6 ? 'text-profit' : s.total_score >= 0.45 ? 'text-yellow-400' : 'text-gray-500'
+                      }`}>
+                        {(s.total_score * 100).toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3"><ScoreBar value={s.trend_score} color={scoreBarColor(s.trend_score)} /></td>
+                    <td className="py-2.5 px-3"><ScoreBar value={s.momentum_score} color={scoreBarColor(s.momentum_score)} /></td>
+                    <td className="py-2.5 px-3"><ScoreBar value={s.volatility_score} color={scoreBarColor(s.volatility_score)} /></td>
+                    <td className="py-2.5 px-3"><ScoreBar value={s.timeframe_alignment} color={scoreBarColor(s.timeframe_alignment)} /></td>
+                    <td className="py-2.5 px-3"><span className={regimeBadge(s.regime)}>{s.regime}</span></td>
+                    <td className="py-2.5 px-3">
+                      {s.direction_bias && s.direction_bias !== 'neutral' ? (
+                        <span className={s.direction_bias === 'bullish' ? 'text-profit text-xs font-medium' : 'text-loss text-xs font-medium'}>
+                          {s.direction_bias === 'bullish' ? 'Haussier' : 'Baissier'}
+                        </span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">---</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {s.selected_strategy ? (
+                        <span className="text-xs text-gray-300 font-mono">{s.selected_strategy}</span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">---</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {s.is_active ? (
+                        <span className="badge-profit">Active</span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">---</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
