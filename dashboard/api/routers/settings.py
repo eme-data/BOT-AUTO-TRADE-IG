@@ -13,7 +13,7 @@ from dashboard.api.deps import get_db
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 # Keys that must be stored encrypted
-ENCRYPTED_KEYS = {"ig_api_key", "ig_username", "ig_password"}
+ENCRYPTED_KEYS = {"ig_api_key", "ig_username", "ig_password", "ai_api_key"}
 
 
 class SettingResponse(BaseModel):
@@ -214,6 +214,10 @@ def _mask(value: str) -> str:
 def _category_from_key(key: str) -> str:
     if key.startswith("ig_"):
         return "ig"
+    if key.startswith("ai_"):
+        return "ai"
+    if key.startswith("autopilot_"):
+        return "autopilot"
     if key.startswith("bot_"):
         if "loss" in key or "size" in key or "risk" in key or "stop" in key or "limit" in key or "position" in key:
             return "risk"

@@ -5,7 +5,9 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import DailyPnL, Signal, StrategyState, Trade
+from typing import Any
+
+from bot.db.models import AIAnalysisLog, DailyPnL, Signal, StrategyState, Trade
 
 
 class TradeRepository:
@@ -114,3 +116,59 @@ class DailyPnLRepository:
             .order_by(DailyPnL.date)
         )
         return list(result.scalars().all())
+
+
+class AIAnalysisRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def save(self, **kwargs: Any) -> AIAnalysisLog:
+        log = AIAnalysisLog(**kwargs)
+        self.session.add(log)
+        await self.session.commit()
+        await self.session.refresh(log)
+        return log
+
+    async def get_recent(self, limit: int = 50) -> list[AIAnalysisLog]:
+        result = await self.session.execute(
+            select(AIAnalysisLog)
+            .order_by(AIAnalysisLog.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_epic(self, epic: str, limit: int = 20) -> list[AIAnalysisLog]:
+        result = await self.session.execute(
+            select(AIAnalysisLog)
+            .where(AIAnalysisLog.epic == epic)
+            .order_by(AIAnalysisLog.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_by_mode(self, mode: str, limit: int = 30) -> list[AIAnalysisLog]:
+        result = await self.session.execute(
+            select(AIAnalysisLog)
+            .where(AIAnalysisLog.mode == mode)
+            .order_by(AIAnalysisLog.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_stats(self) -> dict[str, Any]:
+        all_logs = await self.get_recent(limit=500)
+        if not all_logs:
+            return {"total": 0}
+        approvals = sum(1 for l in all_logs if l.verdict == "APPROVE")
+        rejections = sum(1 for l in all_logs if l.verdict == "REJECT")
+        adjustments = sum(1 for l in all_logs if l.verdict == "ADJUST")
+        avg_latency = sum(l.latency_ms for l in all_logs) / len(all_logs)
+        avg_confidence = sum(l.confidence for l in all_logs) / len(all_logs)
+        return {
+            "total": len(all_logs),
+            "approvals": approvals,
+            "rejections": rejections,
+            "adjustments": adjustments,
+            "avg_latency_ms": round(avg_latency),
+            "avg_confidence": round(avg_confidence, 3),
+        }

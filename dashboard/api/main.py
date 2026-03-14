@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from dashboard.api.deps import close_redis, get_redis
 from dashboard.api.routers import (
+    ai,
     auth,
     autopilot,
     backtest,
@@ -70,7 +71,7 @@ async def _ensure_admin_account():
 
 
 app = FastAPI(
-    title="IG Trading Bot Dashboard",
+    title="Altior Holding - Auto-Trade IG",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -99,6 +100,7 @@ app.include_router(notifications.router)
 app.include_router(backtest.router)
 app.include_router(users.router)
 app.include_router(autopilot.router)
+app.include_router(ai.router)
 app.include_router(ws.router)
 
 

@@ -30,6 +30,7 @@ class AdminUser(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -147,3 +148,33 @@ class DailyPnL(Base):
     total_trades: Mapped[int] = mapped_column(Integer, default=0)
     winning_trades: Mapped[int] = mapped_column(Integer, default=0)
     losing_trades: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# =====================
+# AI Analysis Logs
+# =====================
+class AIAnalysisLog(Base):
+    __tablename__ = "ai_analysis_logs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    epic: Mapped[str] = mapped_column(String, nullable=False)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(16), nullable=False)
+    confidence: Mapped[float] = mapped_column(Double, default=0.0)
+    reasoning: Mapped[str | None] = mapped_column(Text)
+    market_summary: Mapped[str | None] = mapped_column(Text)
+    risk_warnings: Mapped[dict | None] = mapped_column(JSONB)
+    suggested_adjustments: Mapped[dict | None] = mapped_column(JSONB)
+    signal_direction: Mapped[str | None] = mapped_column(String(8))
+    signal_strategy: Mapped[str | None] = mapped_column(String(64))
+    model_used: Mapped[str | None] = mapped_column(String(64))
+    tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    deal_id: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_ai_logs_created", created_at.desc()),
+        Index("idx_ai_logs_epic", "epic"),
+        Index("idx_ai_logs_mode", "mode"),
+    )

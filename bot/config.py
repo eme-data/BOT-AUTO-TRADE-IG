@@ -85,6 +85,19 @@ class AutoPilotSettings(BaseSettings):
     shadow_mode: bool = True  # Paper trading: log signals without executing
 
 
+class AISettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AI_")
+
+    enabled: bool = False
+    api_key: str = ""
+    model: str = "claude-sonnet-4-6"
+    max_tokens: int = 1024
+    pre_trade_enabled: bool = True
+    market_review_enabled: bool = True
+    sentiment_enabled: bool = False
+    post_trade_enabled: bool = True
+
+
 class Settings(BaseSettings):
     ig: IGSettings = IGSettings()
     db: DatabaseSettings = DatabaseSettings()
@@ -92,6 +105,7 @@ class Settings(BaseSettings):
     bot: BotSettings = BotSettings()
     dashboard: DashboardSettings = DashboardSettings()
     autopilot: AutoPilotSettings = AutoPilotSettings()
+    ai: AISettings = AISettings()
 
 
 settings = Settings()
@@ -124,6 +138,14 @@ _DB_KEY_MAP: dict[str, tuple[str, str, type]] = {
     "autopilot_search_terms": ("autopilot", "search_terms", str),
     "autopilot_api_budget_per_cycle": ("autopilot", "api_budget_per_cycle", int),
     "autopilot_shadow_mode": ("autopilot", "shadow_mode", lambda v: v.lower() in ("true", "1", "yes")),
+    "ai_enabled": ("ai", "enabled", lambda v: v.lower() in ("true", "1", "yes")),
+    "ai_api_key": ("ai", "api_key", str),
+    "ai_model": ("ai", "model", str),
+    "ai_max_tokens": ("ai", "max_tokens", int),
+    "ai_pre_trade_enabled": ("ai", "pre_trade_enabled", lambda v: v.lower() in ("true", "1", "yes")),
+    "ai_market_review_enabled": ("ai", "market_review_enabled", lambda v: v.lower() in ("true", "1", "yes")),
+    "ai_sentiment_enabled": ("ai", "sentiment_enabled", lambda v: v.lower() in ("true", "1", "yes")),
+    "ai_post_trade_enabled": ("ai", "post_trade_enabled", lambda v: v.lower() in ("true", "1", "yes")),
 }
 
 

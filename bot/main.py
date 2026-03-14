@@ -34,6 +34,9 @@ from bot.metrics import (
     start_metrics_server,
 )
 from bot.notifications import load_telegram_settings, notify_bot_status, notify_trade_opened
+from bot.ai.analyzer import ClaudeAnalyzer
+from bot.ai.models import AIVerdict
+from bot.db.repository import AIAnalysisRepository
 from bot.risk.manager import RiskManager
 from bot.risk.models import RiskConfig
 from bot.risk.trading_sessions import is_market_open
@@ -90,6 +93,7 @@ class TradingBot:
         self._command_task: asyncio.Task | None = None
         self._log_buffer: deque[dict] = deque(maxlen=500)
         self.autopilot: AutoPilotManager | None = None
+        self.ai_analyzer = ClaudeAnalyzer()
 
     async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
@@ -259,6 +263,7 @@ class TradingBot:
         await self.broker.disconnect()
         await self._publish_status("stopped")
         await self._publish_log("INFO", "Bot stopped")
+        await self.ai_analyzer.close()
         if self._redis:
             await self._redis.aclose()
             self._redis = None
@@ -395,6 +400,79 @@ class TradingBot:
         if not order:
             ORDERS_REJECTED.labels(reason="risk_check").inc()
             return
+
+        # AI pre-trade validation
+        if self.ai_analyzer.is_enabled:
+            try:
+                positions = await self.broker.get_open_positions()
+                pos_list = [
+                    {"epic": p.epic, "direction": p.direction, "size": p.size, "entry_price": p.level}
+                    for p in positions
+                ]
+                balance_info = await self.broker.get_account_balance()
+                balance = balance_info.get("balance", 0.0)
+
+                bars = await self.broker.get_historical_prices(signal.epic, "HOUR", 10)
+                recent_bars = [
+                    {"open": b.open, "high": b.high, "low": b.low, "close": b.close, "volume": b.volume}
+                    for b in (bars or [])
+                ]
+
+                ai_result = await self.ai_analyzer.validate_signal(
+                    pair=signal.epic,
+                    direction=signal.signal_type,
+                    strategy=strategy_name,
+                    confidence=signal.confidence,
+                    indicators=signal.indicators,
+                    recent_bars=recent_bars,
+                    open_positions=pos_list,
+                    account_balance=balance,
+                )
+
+                # Persist AI analysis
+                async with async_session_factory() as session:
+                    ai_repo = AIAnalysisRepository(session)
+                    await ai_repo.save(
+                        epic=signal.epic,
+                        mode="pre_trade",
+                        verdict=ai_result.verdict.value,
+                        confidence=ai_result.confidence,
+                        reasoning=ai_result.reasoning,
+                        market_summary=ai_result.market_summary,
+                        risk_warnings=ai_result.risk_warnings,
+                        suggested_adjustments=ai_result.suggested_adjustments,
+                        signal_direction=signal.signal_type,
+                        signal_strategy=strategy_name,
+                        model_used=ai_result.model_used,
+                        latency_ms=ai_result.latency_ms,
+                    )
+
+                if ai_result.verdict == AIVerdict.REJECT:
+                    ORDERS_REJECTED.labels(reason="ai_rejected").inc()
+                    await self._publish_log(
+                        "WARNING",
+                        f"AI rejected: {ai_result.reasoning}",
+                        strategy=strategy_name,
+                        epic=signal.epic,
+                    )
+                    return
+
+                if ai_result.verdict == AIVerdict.ADJUST:
+                    adj = ai_result.suggested_adjustments
+                    if adj.get("size_factor"):
+                        order.size = round(order.size * float(adj["size_factor"]), 2)
+                    if adj.get("stop_loss_distance"):
+                        order.stop_distance = float(adj["stop_loss_distance"])
+                    if adj.get("limit_distance"):
+                        order.limit_distance = float(adj["limit_distance"])
+                    await self._publish_log(
+                        "INFO",
+                        f"AI adjusted: {ai_result.reasoning}",
+                        strategy=strategy_name,
+                        epic=signal.epic,
+                    )
+            except Exception as exc:
+                logger.warning("ai_validation_error", error=str(exc), epic=signal.epic)
 
         # Shadow mode: autopilot strategies log signals without executing
         is_autopilot = strategy_name.startswith("ap_")

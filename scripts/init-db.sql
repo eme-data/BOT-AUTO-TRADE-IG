@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     id              SERIAL PRIMARY KEY,
     username        VARCHAR(100) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
+    totp_secret     VARCHAR(64),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -43,7 +44,15 @@ INSERT INTO app_settings (key, value, encrypted, category) VALUES
     ('bot_log_level', 'INFO', FALSE, 'general'),
     ('bot_status', 'stopped', FALSE, 'general'),
     ('telegram_bot_token', '', TRUE, 'notifications'),
-    ('telegram_chat_id', '', FALSE, 'notifications')
+    ('telegram_chat_id', '', FALSE, 'notifications'),
+    ('ai_enabled', 'false', FALSE, 'ai'),
+    ('ai_api_key', '', TRUE, 'ai'),
+    ('ai_model', 'claude-sonnet-4-6', FALSE, 'ai'),
+    ('ai_max_tokens', '1024', FALSE, 'ai'),
+    ('ai_pre_trade_enabled', 'true', FALSE, 'ai'),
+    ('ai_market_review_enabled', 'true', FALSE, 'ai'),
+    ('ai_sentiment_enabled', 'false', FALSE, 'ai'),
+    ('ai_post_trade_enabled', 'true', FALSE, 'ai')
 ON CONFLICT (key) DO NOTHING;
 
 -- =====================
@@ -179,3 +188,29 @@ CREATE TABLE IF NOT EXISTS daily_pnl (
     losing_trades   INTEGER DEFAULT 0,
     PRIMARY KEY (date, account_id)
 );
+
+-- =====================
+-- AI Analysis Logs
+-- =====================
+CREATE TABLE IF NOT EXISTS ai_analysis_logs (
+    id                  BIGSERIAL PRIMARY KEY,
+    epic                TEXT NOT NULL,
+    mode                VARCHAR(32) NOT NULL,
+    verdict             VARCHAR(16) NOT NULL,
+    confidence          DOUBLE PRECISION DEFAULT 0.0,
+    reasoning           TEXT,
+    market_summary      TEXT,
+    risk_warnings       JSONB,
+    suggested_adjustments JSONB,
+    signal_direction    VARCHAR(8),
+    signal_strategy     VARCHAR(64),
+    model_used          VARCHAR(64),
+    tokens_used         INTEGER DEFAULT 0,
+    latency_ms          INTEGER DEFAULT 0,
+    deal_id             TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_logs_created ON ai_analysis_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_logs_epic ON ai_analysis_logs (epic);
+CREATE INDEX IF NOT EXISTS idx_ai_logs_mode ON ai_analysis_logs (mode);

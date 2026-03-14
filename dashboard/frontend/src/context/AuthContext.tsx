@@ -1,10 +1,14 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 
+interface LoginResult {
+  mfa_required: boolean
+}
+
 interface AuthContextType {
   token: string | null
   isAuthenticated: boolean
   needsSetup: boolean | null
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string, totpCode?: string) => Promise<LoginResult>
   setup: (username: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -31,7 +35,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string, totpCode?: string): Promise<LoginResult> => {
+    if (totpCode) {
+      // Use JSON endpoint for MFA login
+      const res = await fetch('/api/auth/login-mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, totp_code: totpCode }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail || 'Login failed')
+      }
+      const data = await res.json()
+      if (data.mfa_required) {
+        return { mfa_required: true }
+      }
+      localStorage.setItem('token', data.access_token)
+      setToken(data.access_token)
+      setNeedsSetup(false)
+      return { mfa_required: false }
+    }
+
+    // Standard OAuth2 form login
     const body = new URLSearchParams({ username, password })
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -43,9 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || 'Login failed')
     }
     const data = await res.json()
+    if (data.mfa_required) {
+      return { mfa_required: true }
+    }
     localStorage.setItem('token', data.access_token)
     setToken(data.access_token)
     setNeedsSetup(false)
+    return { mfa_required: false }
   }
 
   const setup = async (username: string, password: string) => {

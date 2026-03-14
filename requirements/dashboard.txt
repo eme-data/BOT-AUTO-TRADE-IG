@@ -6,3 +6,5 @@ python-jose[cryptography]>=3.3
 passlib[bcrypt]>=1.7
 bcrypt>=4.0,<4.1
 python-multipart>=0.0.6
+pyotp>=2.9
+qrcode[pil]>=7.4

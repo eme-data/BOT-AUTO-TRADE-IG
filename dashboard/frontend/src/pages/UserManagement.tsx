@@ -27,6 +27,12 @@ export default function UserManagement() {
   // Delete confirmation
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
+  // MFA state
+  const [mfaEnabled, setMfaEnabled] = useState(false)
+  const [mfaSetupData, setMfaSetupData] = useState<{ secret: string; qr_code: string } | null>(null)
+  const [mfaCode, setMfaCode] = useState('')
+  const [mfaLoading, setMfaLoading] = useState(false)
+
   const loadUsers = useCallback(async () => {
     try {
       const res = await apiFetch('/api/users')
@@ -40,6 +46,7 @@ export default function UserManagement() {
       if (res.ok) {
         const data = await res.json()
         setCurrentUsername(data.username)
+        setMfaEnabled(data.mfa_enabled || false)
       }
     } catch { /* */ }
   }, [apiFetch])
@@ -264,6 +271,124 @@ export default function UserManagement() {
             {changingPw ? 'Changing...' : 'Change Password'}
           </button>
         </form>
+      </div>
+
+      {/* MFA / Two-Factor Authentication */}
+      <div className="card p-6">
+        <h2 className="section-title mb-4">Two-Factor Authentication (MFA)</h2>
+
+        {mfaEnabled && !mfaSetupData && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-profit" />
+              <span className="text-sm text-profit font-medium">MFA is enabled</span>
+            </div>
+            <p className="text-xs text-gray-500">Your account is protected with TOTP authentication.</p>
+            <button
+              onClick={async () => {
+                setMfaLoading(true)
+                try {
+                  const res = await apiFetch('/api/auth/mfa/disable', { method: 'POST' })
+                  if (res.ok) {
+                    setMfaEnabled(false)
+                    setMessage({ type: 'success', text: 'MFA disabled' })
+                  }
+                } catch { /* */ }
+                setMfaLoading(false)
+              }}
+              disabled={mfaLoading}
+              className="text-sm bg-loss/20 text-loss hover:bg-loss/30 px-4 py-2 rounded-lg transition-colors"
+            >
+              Disable MFA
+            </button>
+          </div>
+        )}
+
+        {!mfaEnabled && !mfaSetupData && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-gray-600" />
+              <span className="text-sm text-gray-400">MFA is not enabled</span>
+            </div>
+            <p className="text-xs text-gray-500">Protect your account with a TOTP authenticator app (Google Authenticator, Authy, etc.)</p>
+            <button
+              onClick={async () => {
+                setMfaLoading(true)
+                try {
+                  const res = await apiFetch('/api/auth/mfa/setup', { method: 'POST' })
+                  if (res.ok) {
+                    const data = await res.json()
+                    setMfaSetupData(data)
+                  }
+                } catch { /* */ }
+                setMfaLoading(false)
+              }}
+              disabled={mfaLoading}
+              className="btn-primary"
+            >
+              Enable MFA
+            </button>
+          </div>
+        )}
+
+        {mfaSetupData && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-300">Scan this QR code with your authenticator app:</p>
+            <div className="flex justify-center">
+              <img src={mfaSetupData.qr_code} alt="TOTP QR Code" className="rounded-lg" style={{ width: 200, height: 200 }} />
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 mb-1">Or enter this key manually:</p>
+              <code className="text-sm text-accent bg-bg-primary px-3 py-1 rounded font-mono select-all">{mfaSetupData.secret}</code>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Enter the 6-digit code from your app to confirm:</label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="input max-w-[160px] text-center text-lg tracking-[0.3em] font-mono"
+                  placeholder="000000"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                />
+                <button
+                  onClick={async () => {
+                    if (mfaCode.length !== 6) return
+                    setMfaLoading(true)
+                    try {
+                      const res = await apiFetch('/api/auth/mfa/confirm', {
+                        method: 'POST',
+                        body: JSON.stringify({ secret: mfaSetupData.secret, totp_code: mfaCode }),
+                      })
+                      if (res.ok) {
+                        setMfaEnabled(true)
+                        setMfaSetupData(null)
+                        setMfaCode('')
+                        setMessage({ type: 'success', text: 'MFA enabled successfully!' })
+                      } else {
+                        const err = await res.json()
+                        setMessage({ type: 'error', text: err.detail || 'Invalid code' })
+                      }
+                    } catch { /* */ }
+                    setMfaLoading(false)
+                  }}
+                  disabled={mfaLoading || mfaCode.length !== 6}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+            <button
+              className="text-xs text-gray-500 hover:text-gray-300"
+              onClick={() => { setMfaSetupData(null); setMfaCode('') }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

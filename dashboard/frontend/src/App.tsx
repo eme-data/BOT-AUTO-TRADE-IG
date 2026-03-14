@@ -14,6 +14,8 @@ import Notifications from './pages/Notifications'
 import Backtest from './pages/Backtest'
 import AutoPilot from './pages/AutoPilot'
 import UserManagement from './pages/UserManagement'
+import AIAnalysis from './pages/AIAnalysis'
+import AltiorLogo from './assets/AltiorLogo'
 
 // Heroicons outline (inline SVG to avoid extra dependency)
 function IconDashboard() {
@@ -49,6 +51,9 @@ function IconIG() {
 function IconUsers() {
   return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
 }
+function IconAI() {
+  return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" /></svg>
+}
 function IconCollapse() {
   return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
 }
@@ -79,6 +84,7 @@ const mainNav: NavItem[] = [
   { to: '/trades', label: 'Trades', icon: <IconTrades /> },
   { to: '/autopilot', label: 'Auto-Pilot', icon: <IconAutoPilot /> },
   { to: '/backtest', label: 'Backtest', icon: <IconBacktest /> },
+  { to: '/ai', label: 'AI Analysis', icon: <IconAI /> },
   { to: '/logs', label: 'Logs', icon: <IconLogs /> },
 ]
 
@@ -103,14 +109,12 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   return (
     <aside className={`fixed top-0 left-0 h-screen bg-bg-secondary border-r border-border flex flex-col z-40 transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-border shrink-0">
-        <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-sm">IG</span>
-        </div>
+      <div className="flex items-center gap-2 px-3 h-16 border-b border-border shrink-0">
+        <AltiorLogo size={collapsed ? 32 : 36} className="text-white shrink-0" />
         {!collapsed && (
           <div className="overflow-hidden">
-            <div className="text-sm font-semibold text-white whitespace-nowrap">Trading Bot</div>
-            <div className="text-[10px] text-gray-500">v0.3.0</div>
+            <div className="text-sm font-semibold text-white whitespace-nowrap">Altior Holding</div>
+            <div className="text-[10px] text-gray-500">Auto-Trade IG</div>
           </div>
         )}
       </div>
@@ -191,6 +195,7 @@ function App() {
             <Route path="/risk" element={<ProtectedRoute><RiskSettings /></ProtectedRoute>} />
             <Route path="/autopilot" element={<ProtectedRoute><AutoPilot /></ProtectedRoute>} />
             <Route path="/backtest" element={<ProtectedRoute><Backtest /></ProtectedRoute>} />
+            <Route path="/ai" element={<ProtectedRoute><AIAnalysis /></ProtectedRoute>} />
             <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />

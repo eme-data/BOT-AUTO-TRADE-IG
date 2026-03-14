@@ -52,7 +52,7 @@ async def test_telegram(
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "\u2705 <b>IG Trading Bot</b>\nTest notification successful!",
+        "text": "\u2705 <b>Altior Auto-Trade IG</b>\nTest notification successful!",
         "parse_mode": "HTML",
     }
 
