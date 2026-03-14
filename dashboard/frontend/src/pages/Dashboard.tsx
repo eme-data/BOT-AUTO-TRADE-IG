@@ -21,6 +21,18 @@ interface ActivityEntry {
   message: string
 }
 
+interface AIDecision {
+  id: number
+  epic: string
+  mode: string
+  verdict: string
+  confidence: number
+  reasoning: string
+  signal_direction: string
+  latency_ms: number
+  created_at: string
+}
+
 interface Metrics {
   daily_pnl: number
   total_pnl: number
@@ -66,6 +78,7 @@ export default function Dashboard() {
   const [pnlHistory, setPnlHistory] = useState<PnLPoint[]>([])
   const [autopilot, setAutopilot] = useState<AutoPilotStatus | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
 
   const handleMessage = useCallback((data: { type: string; [key: string]: unknown }) => {
     if (data.type === 'position_update') fetchPositions()
@@ -91,10 +104,13 @@ export default function Dashboard() {
   const fetchActivity = async () => {
     try { const r = await apiFetch('/api/autopilot/activity'); if (r.ok) setActivity(await r.json()) } catch {}
   }
+  const fetchAiDecisions = async () => {
+    try { const r = await apiFetch('/api/ai/logs?limit=10'); if (r.ok) setAiDecisions(await r.json()) } catch {}
+  }
 
   useEffect(() => {
-    fetchMetrics(); fetchAccount(); fetchPositions(); fetchPnlHistory(); fetchAutopilot(); fetchActivity()
-    const interval = setInterval(() => { fetchMetrics(); fetchPositions(); fetchAutopilot(); fetchActivity() }, 10000)
+    fetchMetrics(); fetchAccount(); fetchPositions(); fetchPnlHistory(); fetchAutopilot(); fetchActivity(); fetchAiDecisions()
+    const interval = setInterval(() => { fetchMetrics(); fetchPositions(); fetchAutopilot(); fetchActivity(); fetchAiDecisions() }, 10000)
     const accountInterval = setInterval(fetchAccount, 60000)
     return () => { clearInterval(interval); clearInterval(accountInterval) }
   }, [])
@@ -208,34 +224,74 @@ export default function Dashboard() {
         <PositionsTable positions={positions} />
       </div>
 
-      {/* Auto-Pilot Logs */}
-      {autopilot?.enabled && (
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="section-title">Auto-Pilot Logs</h3>
-            <NavLink to="/autopilot" className="text-xs text-accent hover:text-blue-300 transition-colors">Configure</NavLink>
+      {/* Auto-Pilot Logs + AI Decisions side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Auto-Pilot Logs */}
+        {autopilot?.enabled && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="section-title">Auto-Pilot Activity</h3>
+              <NavLink to="/autopilot" className="text-xs text-accent hover:text-blue-300 transition-colors">Configure</NavLink>
+            </div>
+            {activity.length > 0 ? (
+              <div className="space-y-0.5 max-h-72 overflow-y-auto font-mono text-xs">
+                {activity.map((entry, i) => {
+                  const levelColor = entry.level === 'ERROR' ? 'text-loss'
+                    : entry.level === 'WARN' ? 'text-yellow-400'
+                    : 'text-gray-500'
+                  const time = new Date(entry.time).toLocaleTimeString()
+                  return (
+                    <div key={i} className="flex gap-2 py-0.5 hover:bg-bg-hover/50 rounded px-1 -mx-1">
+                      <span className="text-gray-600 shrink-0">{time}</span>
+                      <span className={`shrink-0 w-10 ${levelColor}`}>{entry.level}</span>
+                      <span className="text-gray-300">{entry.message}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No activity yet. Waiting for next scan cycle...</p>
+            )}
           </div>
-          {activity.length > 0 ? (
-            <div className="space-y-0.5 max-h-64 overflow-y-auto font-mono text-xs">
-              {activity.map((entry, i) => {
-                const levelColor = entry.level === 'ERROR' ? 'text-loss'
-                  : entry.level === 'WARN' ? 'text-yellow-400'
-                  : 'text-gray-500'
-                const time = new Date(entry.time).toLocaleTimeString()
+        )}
+
+        {/* AI Decisions */}
+        {aiDecisions.length > 0 && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="section-title">AI Decisions</h3>
+              <NavLink to="/ai" className="text-xs text-accent hover:text-blue-300 transition-colors">View all</NavLink>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {aiDecisions.map((d) => {
+                const verdictColor = d.verdict === 'APPROVE' ? 'badge-profit'
+                  : d.verdict === 'REJECT' ? 'badge-loss'
+                  : d.verdict === 'ADJUST' ? 'badge-warning'
+                  : 'badge-neutral'
+                const dirColor = d.signal_direction === 'BUY' ? 'text-profit' : d.signal_direction === 'SELL' ? 'text-loss' : 'text-gray-500'
                 return (
-                  <div key={i} className="flex gap-2 py-0.5 hover:bg-bg-hover/50 rounded px-1 -mx-1">
-                    <span className="text-gray-600 shrink-0">{time}</span>
-                    <span className={`shrink-0 w-10 ${levelColor}`}>{entry.level}</span>
-                    <span className="text-gray-300">{entry.message}</span>
+                  <div key={d.id} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-bg-hover/50 -mx-2">
+                    <div className="shrink-0 pt-0.5">
+                      <span className={verdictColor}>{d.verdict}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-white">{d.epic.split('.').slice(-3, -2).join('') || d.epic}</span>
+                        {d.signal_direction && <span className={`text-xs font-medium ${dirColor}`}>{d.signal_direction}</span>}
+                        <span className="text-[10px] text-gray-600">{d.latency_ms}ms</span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{d.reasoning}</p>
+                    </div>
+                    <div className="text-[10px] text-gray-600 shrink-0 whitespace-nowrap">
+                      {d.created_at ? new Date(d.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                    </div>
                   </div>
                 )
               })}
             </div>
-          ) : (
-            <p className="text-xs text-gray-500">No activity yet. Waiting for next scan cycle...</p>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

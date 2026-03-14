@@ -23,8 +23,19 @@ export default function IGSettings() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [configured, setConfigured] = useState(false)
 
+  // AI Settings
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiApiKey, setAiApiKey] = useState('')
+  const [aiModel, setAiModel] = useState('claude-sonnet-4-6')
+  const [aiPreTrade, setAiPreTrade] = useState(true)
+  const [aiMarketReview, setAiMarketReview] = useState(true)
+  const [aiPostTrade, setAiPostTrade] = useState(true)
+  const [aiConfigured, setAiConfigured] = useState(false)
+  const [savingAi, setSavingAi] = useState(false)
+
   useEffect(() => {
     loadSettings()
+    loadAiSettings()
   }, [])
 
   const loadSettings = async () => {
@@ -39,6 +50,54 @@ export default function IGSettings() {
         }
       }
     } catch { /* */ }
+  }
+
+  const loadAiSettings = async () => {
+    try {
+      const res = await apiFetch('/api/settings/ai')
+      if (res.ok) {
+        const data = await res.json()
+        for (const s of data) {
+          if (s.key === 'ai_enabled') setAiEnabled(s.value === 'true')
+          if (s.key === 'ai_api_key') setAiConfigured(s.value !== '' && s.value !== '***configured***' ? true : s.encrypted && s.value !== '')
+          if (s.key === 'ai_model') setAiModel(s.value || 'claude-sonnet-4-6')
+          if (s.key === 'ai_pre_trade_enabled') setAiPreTrade(s.value === 'true')
+          if (s.key === 'ai_market_review_enabled') setAiMarketReview(s.value === 'true')
+          if (s.key === 'ai_post_trade_enabled') setAiPostTrade(s.value === 'true')
+        }
+      }
+    } catch { /* */ }
+  }
+
+  const handleSaveAi = async () => {
+    setSavingAi(true)
+    setMessage(null)
+    try {
+      const settingsToSave: Record<string, string> = {
+        ai_enabled: aiEnabled ? 'true' : 'false',
+        ai_model: aiModel,
+        ai_pre_trade_enabled: aiPreTrade ? 'true' : 'false',
+        ai_market_review_enabled: aiMarketReview ? 'true' : 'false',
+        ai_post_trade_enabled: aiPostTrade ? 'true' : 'false',
+      }
+      if (aiApiKey) settingsToSave.ai_api_key = aiApiKey
+
+      const res = await apiFetch('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ settings: settingsToSave }),
+      })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'AI settings saved. Restart the bot to apply.' })
+        if (aiApiKey) { setAiConfigured(true); setAiApiKey('') }
+      } else {
+        const err = await res.json()
+        setMessage({ type: 'error', text: err.detail || 'Save failed' })
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message })
+    } finally {
+      setSavingAi(false)
+    }
   }
 
   const handleSave = async () => {
@@ -234,6 +293,93 @@ export default function IGSettings() {
           </div>
         </div>
       )}
+
+      {/* AI Analysis Settings */}
+      <h2 className="text-xl font-semibold text-white pt-4">AI Analysis (Claude)</h2>
+
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm font-medium text-white">Enable AI Analysis</span>
+            <p className="text-xs text-gray-500 mt-0.5">Claude analysera chaque signal avant execution</p>
+          </div>
+          <button
+            onClick={() => setAiEnabled(!aiEnabled)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${aiEnabled ? 'bg-profit' : 'bg-gray-600'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${aiEnabled ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 mb-1">Anthropic API Key</label>
+          <input
+            type="password"
+            value={aiApiKey}
+            onChange={(e) => setAiApiKey(e.target.value)}
+            placeholder={aiConfigured ? '***configured***' : 'sk-ant-...'}
+            className="input"
+          />
+          <p className="text-[10px] text-gray-600 mt-1">Obtenir une cle sur console.anthropic.com</p>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 mb-1">Model</label>
+          <select value={aiModel} onChange={(e) => setAiModel(e.target.value)} className="input">
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (rapide)</option>
+            <option value="claude-opus-4-6">Claude Opus 4.6 (precis)</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (economique)</option>
+          </select>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <h4 className="section-title">Modes d'analyse</h4>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <span className="text-sm text-white">Pre-Trade</span>
+              <p className="text-[10px] text-gray-500">Valide chaque signal avant ouverture de position</p>
+            </div>
+            <button
+              onClick={() => setAiPreTrade(!aiPreTrade)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${aiPreTrade ? 'bg-accent' : 'bg-gray-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${aiPreTrade ? 'translate-x-5' : ''}`} />
+            </button>
+          </label>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <span className="text-sm text-white">Market Review</span>
+              <p className="text-[10px] text-gray-500">Analyse de marche a la demande depuis le dashboard</p>
+            </div>
+            <button
+              onClick={() => setAiMarketReview(!aiMarketReview)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${aiMarketReview ? 'bg-accent' : 'bg-gray-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${aiMarketReview ? 'translate-x-5' : ''}`} />
+            </button>
+          </label>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <span className="text-sm text-white">Post-Trade</span>
+              <p className="text-[10px] text-gray-500">Scoring et retour d'experience apres cloture</p>
+            </div>
+            <button
+              onClick={() => setAiPostTrade(!aiPostTrade)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${aiPostTrade ? 'bg-accent' : 'bg-gray-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${aiPostTrade ? 'translate-x-5' : ''}`} />
+            </button>
+          </label>
+        </div>
+
+        <button
+          onClick={handleSaveAi}
+          disabled={savingAi}
+          className="btn-primary mt-2"
+        >
+          {savingAi ? 'Saving...' : 'Save AI Settings'}
+        </button>
+      </div>
     </div>
   )
 }
