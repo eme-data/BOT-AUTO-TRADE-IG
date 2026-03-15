@@ -262,6 +262,8 @@ class AutoPilotManager:
                     "direction_bias": s.direction_bias,
                     "timeframe_alignment": s.timeframe_alignment,
                     "selected_strategy": s.selected_strategy,
+                    "sentiment_long": s.sentiment_long,
+                    "sentiment_short": s.sentiment_short,
                     "is_active": s.is_active,
                     "scored_at": s.scored_at.isoformat(),
                 }

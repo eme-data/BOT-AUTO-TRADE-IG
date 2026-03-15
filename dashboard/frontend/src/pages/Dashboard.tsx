@@ -17,6 +17,8 @@ interface MarketScore {
   regime: string
   direction_bias: string
   selected_strategy: string | null
+  sentiment_long: number | null
+  sentiment_short: number | null
   is_active: boolean
   scored_at: string
 }
@@ -323,6 +325,7 @@ export default function Dashboard() {
                   <th className="text-left py-2 px-3 font-medium">Momentum</th>
                   <th className="text-left py-2 px-3 font-medium">Volatilite</th>
                   <th className="text-left py-2 px-3 font-medium">Alignement</th>
+                  <th className="text-left py-2 px-3 font-medium">Sentiment</th>
                   <th className="text-left py-2 px-3 font-medium">Regime</th>
                   <th className="text-left py-2 px-3 font-medium">Direction</th>
                   <th className="text-left py-2 px-3 font-medium">Strategie</th>
@@ -346,6 +349,19 @@ export default function Dashboard() {
                     <td className="py-2.5 px-3"><ScoreBar value={s.momentum_score} color={scoreBarColor(s.momentum_score)} /></td>
                     <td className="py-2.5 px-3"><ScoreBar value={s.volatility_score} color={scoreBarColor(s.volatility_score)} /></td>
                     <td className="py-2.5 px-3"><ScoreBar value={s.timeframe_alignment} color={scoreBarColor(s.timeframe_alignment)} /></td>
+                    <td className="py-2.5 px-3">
+                      {s.sentiment_long != null && s.sentiment_long > 0 ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-2 bg-bg-primary rounded-full overflow-hidden flex">
+                            <div className="h-full bg-profit rounded-l-full" style={{ width: `${s.sentiment_long}%` }} />
+                            <div className="h-full bg-loss rounded-r-full" style={{ width: `${s.sentiment_short}%` }} />
+                          </div>
+                          <span className="text-[10px] text-gray-500">{s.sentiment_long?.toFixed(0)}L</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 text-xs">---</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-3"><span className={regimeBadge(s.regime)}>{s.regime}</span></td>
                     <td className="py-2.5 px-3">
                       {s.direction_bias && s.direction_bias !== 'neutral' ? (

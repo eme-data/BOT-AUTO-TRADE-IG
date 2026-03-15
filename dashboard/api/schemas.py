@@ -94,6 +94,8 @@ class AutoPilotScoreResponse(BaseModel):
     direction_bias: str = "neutral"
     timeframe_alignment: float = 0.0
     selected_strategy: str | None = None
+    sentiment_long: float | None = None
+    sentiment_short: float | None = None
     is_active: bool = False
     scored_at: str = ""
 

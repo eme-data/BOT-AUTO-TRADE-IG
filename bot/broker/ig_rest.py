@@ -242,6 +242,35 @@ class IGRestClient(BrokerClient):
         return bars
 
     @auto_retry
+    async def get_client_sentiment(self, market_id: str) -> dict:
+        """Fetch client sentiment for a market (% long vs short)."""
+        raw = await self._run_sync(self._fetch_sentiment_raw, market_id)
+        return raw
+
+    def _fetch_sentiment_raw(self, market_id: str) -> dict:
+        """Direct REST call to /clientsentiment/{marketId}."""
+        session = self._ig.session
+        base_url = self._ig.BASE_URL
+        old_version = session.headers.get("VERSION")
+        session.headers["VERSION"] = "1"
+        try:
+            response = session.get(f"{base_url}/clientsentiment/{market_id}")
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "market_id": data.get("marketId", market_id),
+                "long_pct": float(data.get("longPositionPercentage", 0)),
+                "short_pct": float(data.get("shortPositionPercentage", 0)),
+            }
+        except Exception:
+            return {"market_id": market_id, "long_pct": 0, "short_pct": 0}
+        finally:
+            if old_version:
+                session.headers["VERSION"] = old_version
+            else:
+                session.headers.pop("VERSION", None)
+
+    @auto_retry
     async def get_open_positions(self) -> list[Position]:
         result = await self._run_sync(self._ig.fetch_open_positions)
         positions = []

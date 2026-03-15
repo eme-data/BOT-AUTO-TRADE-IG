@@ -19,6 +19,8 @@ class MarketScore:
     timeframe_alignment: float = 0.0
     selected_strategy: str | None = None
     strategy_config: dict = field(default_factory=dict)
+    sentiment_long: float | None = None
+    sentiment_short: float | None = None
     is_active: bool = False
     scored_at: datetime = field(default_factory=datetime.utcnow)
 

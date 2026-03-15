@@ -56,7 +56,22 @@ class MarketScorer:
             logger.warning("score_no_data", epic=epic, instrument=instrument_name)
             return MarketScore(epic=epic, instrument_name=instrument_name)
 
-        return self._combine_scores(epic, instrument_name, scores_by_tf)
+        score = self._combine_scores(epic, instrument_name, scores_by_tf)
+
+        # Fetch client sentiment (non-blocking, best-effort)
+        try:
+            # Extract market_id from epic: CS.D.EURUSD.CFD.IP -> EURUSD
+            parts = epic.upper().replace(".", "_").split("_")
+            # Try common patterns
+            market_id = epic.split(".")[2] if len(epic.split(".")) >= 4 else epic
+            sentiment = await self.broker.get_client_sentiment(market_id)
+            if sentiment.get("long_pct", 0) > 0 or sentiment.get("short_pct", 0) > 0:
+                score.sentiment_long = sentiment["long_pct"]
+                score.sentiment_short = sentiment["short_pct"]
+        except Exception:
+            pass  # sentiment is optional metadata
+
+        return score
 
     def _bars_to_df(self, bars) -> pd.DataFrame:
         """Convert OHLCV list to pandas DataFrame."""
