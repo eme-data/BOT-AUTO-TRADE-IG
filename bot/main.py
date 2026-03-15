@@ -690,6 +690,34 @@ class TradingBot:
             await r.set("ig:account_balance", str(balance.get("balance", 0)), ex=120)
             # Refresh the "bot is alive" heartbeat
             await r.set("bot:current_status", "running", ex=90)
+
+            # Publish calendar status for dashboard
+            try:
+                cal_status = self.calendar.get_status()
+                # Add upcoming events list
+                import datetime as _dt
+                _now = _dt.datetime.utcnow()
+                upcoming = [
+                    {"name": e.name, "time": e.time.isoformat(), "impact": e.impact, "currency": e.currency}
+                    for e in sorted(self.calendar._events, key=lambda e: e.time)
+                    if e.time > _now
+                ][:10]
+                cal_status["upcoming_events"] = upcoming
+                await r.set("calendar:status", json.dumps(cal_status), ex=120)
+            except Exception as ce:
+                logger.debug("calendar_publish_error", error=str(ce))
+
+            # Publish VIX data for dashboard
+            try:
+                vix_mult = await self.risk_manager.vix_monitor.get_adjustment()
+                vix_data = {
+                    "level": self.risk_manager.vix_monitor.vix_level,
+                    "regime": self.risk_manager.vix_monitor.vix_regime,
+                    "multiplier": vix_mult,
+                }
+                await r.set("risk:vix", json.dumps(vix_data), ex=7200)
+            except Exception as ve:
+                logger.debug("vix_publish_error", error=str(ve))
         except Exception as e:
             logger.error("account_metrics_error", error=str(e))
 

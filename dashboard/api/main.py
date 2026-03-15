@@ -16,6 +16,7 @@ from dashboard.api.routers import (
     autopilot,
     backtest,
     bot_control,
+    calendar,
     markets,
     metrics,
     notifications,
@@ -101,6 +102,7 @@ app.include_router(backtest.router)
 app.include_router(users.router)
 app.include_router(autopilot.router)
 app.include_router(ai.router)
+app.include_router(calendar.router)
 app.include_router(ws.router)
 
 

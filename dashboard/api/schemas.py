@@ -105,6 +105,9 @@ class AutoPilotStatusResponse(BaseModel):
     last_scan: str | None = None
     active_markets: int = 0
     scores: list[AutoPilotScoreResponse] = []
+    vix_level: float | None = None
+    vix_regime: str = "unknown"
+    vix_multiplier: float = 1.0
 
 
 class AutoPilotConfigRequest(BaseModel):

@@ -64,6 +64,15 @@ async def get_autopilot_status(
         except (json.JSONDecodeError, TypeError):
             pass
 
+    # Get VIX data from Redis (published by bot's risk manager)
+    vix_raw = await r.get("risk:vix")
+    vix_data = {}
+    if vix_raw:
+        try:
+            vix_data = json.loads(vix_raw)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return AutoPilotStatusResponse(
         enabled=enabled,
         shadow_mode=shadow_mode,
@@ -71,6 +80,9 @@ async def get_autopilot_status(
         last_scan=last_scan,
         active_markets=active_count,
         scores=scores,
+        vix_level=vix_data.get("level"),
+        vix_regime=vix_data.get("regime", "unknown"),
+        vix_multiplier=vix_data.get("multiplier", 1.0),
     )
 
 

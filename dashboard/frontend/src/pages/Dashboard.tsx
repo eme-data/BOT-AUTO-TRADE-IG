@@ -28,6 +28,9 @@ interface AutoPilotStatus {
   last_scan: string | null
   active_markets: number
   scores: MarketScore[]
+  vix_level: number | null
+  vix_regime: string
+  vix_multiplier: number
 }
 
 interface ActivityEntry {
@@ -46,6 +49,22 @@ interface AIDecision {
   signal_direction: string
   latency_ms: number
   created_at: string
+}
+
+interface CalendarEvent {
+  name: string
+  time: string
+  impact: string
+  currency: string
+}
+
+interface CalendarStatus {
+  enabled: boolean
+  paused: boolean
+  paused_until: string | null
+  next_event: { name: string; time: string; impact: string } | null
+  total_events: number
+  upcoming_events: CalendarEvent[]
 }
 
 interface Metrics {
@@ -121,6 +140,7 @@ export default function Dashboard() {
   const [autopilot, setAutopilot] = useState<AutoPilotStatus | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
   const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
+  const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
 
   const handleMessage = useCallback((data: { type: string; [key: string]: unknown }) => {
     if (data.type === 'position_update') fetchPositions()
@@ -149,14 +169,17 @@ export default function Dashboard() {
   const fetchAiDecisions = async () => {
     try { const r = await apiFetch('/api/ai/logs?limit=10'); if (r.ok) setAiDecisions(await r.json()) } catch {}
   }
+  const fetchCalendar = async () => {
+    try { const r = await apiFetch('/api/calendar/status'); if (r.ok) setCalendar(await r.json()) } catch {}
+  }
 
   const handleScanNow = async () => {
     try { await apiFetch('/api/autopilot/scan-now', { method: 'POST' }) } catch {}
   }
 
   useEffect(() => {
-    fetchMetrics(); fetchAccount(); fetchPositions(); fetchPnlHistory(); fetchAutopilot(); fetchActivity(); fetchAiDecisions()
-    const interval = setInterval(() => { fetchMetrics(); fetchPositions(); fetchAutopilot(); fetchActivity(); fetchAiDecisions() }, 10000)
+    fetchMetrics(); fetchAccount(); fetchPositions(); fetchPnlHistory(); fetchAutopilot(); fetchActivity(); fetchAiDecisions(); fetchCalendar()
+    const interval = setInterval(() => { fetchMetrics(); fetchPositions(); fetchAutopilot(); fetchActivity(); fetchAiDecisions(); fetchCalendar() }, 10000)
     const accountInterval = setInterval(fetchAccount, 60000)
     return () => { clearInterval(interval); clearInterval(accountInterval) }
   }, [])
@@ -200,6 +223,38 @@ export default function Dashboard() {
               </div>
             )}
           </NavLink>
+        )}
+
+        {/* VIX Indicator */}
+        {autopilot?.vix_level != null && (
+          <div className={`card px-4 py-2.5 flex items-center gap-3 ${
+            autopilot.vix_regime === 'extreme' ? 'border-loss/40' :
+            autopilot.vix_regime === 'elevated' ? 'border-orange-500/40' :
+            autopilot.vix_regime === 'normal' ? 'border-yellow-400/40' :
+            'border-profit/40'
+          }`}>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                autopilot.vix_regime === 'extreme' ? 'bg-loss animate-pulse' :
+                autopilot.vix_regime === 'elevated' ? 'bg-orange-500' :
+                autopilot.vix_regime === 'normal' ? 'bg-yellow-400' :
+                'bg-profit'
+              }`} />
+              <span className="text-xs text-gray-500">VIX</span>
+              <span className={`text-sm font-bold ${
+                autopilot.vix_regime === 'extreme' ? 'text-loss' :
+                autopilot.vix_regime === 'elevated' ? 'text-orange-500' :
+                autopilot.vix_regime === 'normal' ? 'text-yellow-400' :
+                'text-profit'
+              }`}>
+                {autopilot.vix_level.toFixed(1)}
+              </span>
+            </div>
+            <div className="text-[10px] text-gray-500 border-l border-border pl-3">
+              <div>{autopilot.vix_regime}</div>
+              <div>sizing x{autopilot.vix_multiplier}</div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -355,6 +410,60 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Economic Calendar */}
+      {calendar && calendar.total_events > 0 && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+              <h3 className="text-sm font-medium text-white">Calendrier economique</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              {calendar.paused ? (
+                <span className="badge-warning">Pause active</span>
+              ) : (
+                <span className="badge-profit">Trading actif</span>
+              )}
+            </div>
+          </div>
+          {calendar.upcoming_events.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {calendar.upcoming_events.slice(0, 6).map((ev, i) => {
+                const evDate = new Date(ev.time)
+                const now = new Date()
+                const diffMs = evDate.getTime() - now.getTime()
+                const diffH = Math.floor(diffMs / 3600000)
+                const diffM = Math.floor((diffMs % 3600000) / 60000)
+                const isImminent = diffMs > 0 && diffMs < 3600000
+                return (
+                  <div key={i} className={`bg-bg-primary rounded-lg px-3 py-2 border ${isImminent ? 'border-yellow-400/40' : 'border-border'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-white truncate">{ev.name}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        ev.impact === 'high' ? 'bg-loss/15 text-loss' :
+                        ev.impact === 'medium' ? 'bg-yellow-400/15 text-yellow-400' :
+                        'bg-gray-500/15 text-gray-400'
+                      }`}>{ev.currency}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-500">
+                      <span>{evDate.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                      <span>{evDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                      {diffMs > 0 && (
+                        <span className={isImminent ? 'text-yellow-400 font-medium' : ''}>
+                          {diffH > 0 ? `${diffH}h${diffM}m` : `${diffM}min`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">Aucun evenement a venir</p>
+          )}
+        </div>
+      )}
 
       {/* Open Positions */}
       <div>

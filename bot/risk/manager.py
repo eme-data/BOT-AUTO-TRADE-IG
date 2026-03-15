@@ -7,6 +7,7 @@ import structlog
 from bot.broker.base import BrokerClient
 from bot.broker.models import Direction, OrderRequest, Position
 from bot.risk.models import RiskConfig
+from bot.risk.vix_monitor import VixMonitor
 from bot.strategies.base import SignalResult
 
 logger = structlog.get_logger()
@@ -49,6 +50,7 @@ class RiskManager:
     def __init__(self, broker: BrokerClient, config: RiskConfig | None = None):
         self.broker = broker
         self.config = config or RiskConfig()
+        self.vix_monitor = VixMonitor(broker)
         self._daily_pnl: float = 0.0
         self._daily_reset: datetime = datetime.now()
 
@@ -139,7 +141,22 @@ class RiskManager:
 
             if stop_distance > 0:
                 size = risk_amount / stop_distance
-                return min(size, self.config.max_position_size)
+                size = min(size, self.config.max_position_size)
+
+                # Apply VIX-based adjustment
+                vix_mult = await self.vix_monitor.get_adjustment()
+                if vix_mult < 1.0:
+                    logger.info(
+                        "vix_size_adjustment",
+                        original=round(size, 2),
+                        multiplier=vix_mult,
+                        adjusted=round(size * vix_mult, 2),
+                        vix=self.vix_monitor.vix_level,
+                        regime=self.vix_monitor.vix_regime,
+                    )
+                    size *= vix_mult
+
+                return size
         except Exception as e:
             logger.error("size_calculation_error", error=str(e))
 
