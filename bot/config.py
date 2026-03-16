@@ -211,10 +211,10 @@ async def load_settings_from_db() -> None:
 
 _AUTOPILOT_DEFAULTS = {
     "autopilot_scan_interval_minutes": ("30", "autopilot"),
-    "autopilot_min_score_threshold": ("0.50", "autopilot"),
-    "autopilot_search_terms": ("EUR/USD,GBP/USD,US 500,Gold", "autopilot"),
+    "autopilot_min_score_threshold": ("0.40", "autopilot"),
+    "autopilot_search_terms": ("EUR/USD,GBP/USD,USD/JPY,US 500,Gold,DAX", "autopilot"),
     "autopilot_api_budget_per_cycle": ("15", "autopilot"),
-    "autopilot_max_active_markets": ("3", "autopilot"),
+    "autopilot_max_active_markets": ("4", "autopilot"),
     "autopilot_shadow_mode": ("false", "autopilot"),
 }
 

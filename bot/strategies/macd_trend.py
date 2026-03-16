@@ -23,7 +23,7 @@ class MACDTrendStrategy(AbstractStrategy):
             "slow_period": 26,
             "signal_period": 9,
             "atr_period": 14,
-            "atr_multiplier": 2.0,
+            "atr_multiplier": 1.5,
             "resolution": "HOUR",
             "history_bars": 100,
             "size": 1.0,

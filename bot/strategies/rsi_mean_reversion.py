@@ -19,13 +19,13 @@ class RSIMeanReversionStrategy(AbstractStrategy):
         default_config = {
             "epics": [],
             "rsi_period": 14,
-            "oversold": 30,
-            "overbought": 70,
-            "ema_period": 200,
+            "oversold": 35,
+            "overbought": 65,
+            "ema_period": 50,
             "resolution": "HOUR",
-            "history_bars": 250,
-            "stop_distance": 20,
-            "limit_distance": 40,
+            "history_bars": 100,
+            "stop_distance": 15,
+            "limit_distance": 30,
             "size": 1.0,
         }
         merged = {**default_config, **(config or {})}

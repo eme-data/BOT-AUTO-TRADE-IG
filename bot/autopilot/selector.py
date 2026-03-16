@@ -21,33 +21,34 @@ class StrategySelector:
         if score.regime == "trending":
             return "macd_trend", {
                 **base,
-                "atr_multiplier": 2.5 if score.volatility_score > 0.7 else 2.0,
-                "limit_ratio": 2.5,
+                "atr_multiplier": 1.5,
+                "limit_ratio": 2.0,
             }
 
         if score.regime == "ranging":
             return "rsi_mean_reversion", {
                 **base,
-                "oversold": 25,
-                "overbought": 75,
+                "oversold": 35,
+                "overbought": 65,
+                "ema_period": 50,
                 "stop_distance": 15,
                 "limit_distance": 30,
             }
 
         # Volatile regime: choose based on momentum characteristics
-        # High momentum + clear direction → MACD can catch the move
-        if score.momentum_score > 0.6 and score.direction_bias != "neutral":
+        if score.momentum_score > 0.5 and score.direction_bias != "neutral":
             return "macd_trend", {
                 **base,
-                "atr_multiplier": 3.0,  # wider stops for volatility
+                "atr_multiplier": 1.5,
                 "limit_ratio": 2.0,
             }
 
         # Volatile but momentum fading or directionless → mean reversion
         return "rsi_mean_reversion", {
             **base,
-            "oversold": 30,
-            "overbought": 70,
-            "stop_distance": 20,
-            "limit_distance": 40,
+            "oversold": 35,
+            "overbought": 65,
+            "ema_period": 50,
+            "stop_distance": 15,
+            "limit_distance": 30,
         }
