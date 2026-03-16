@@ -143,6 +143,10 @@ export default function Dashboard() {
   const [activity, setActivity] = useState<ActivityEntry[]>([])
   const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
+  const [equityCurve, setEquityCurve] = useState<{
+    initial_balance: number; current_balance: number; total_pnl: number; max_drawdown_pct: number;
+    curve: { date: string; equity: number; daily_pnl: number; cumulative_pnl: number; trades: number; drawdown_pct: number }[]
+  } | null>(null)
 
   const handleMessage = useCallback((data: { type: string; [key: string]: unknown }) => {
     if (data.type === 'position_update') fetchPositions()
@@ -174,13 +178,16 @@ export default function Dashboard() {
   const fetchCalendar = async () => {
     try { const r = await apiFetch('/api/calendar/status'); if (r.ok) setCalendar(await r.json()) } catch {}
   }
+  const fetchEquityCurve = async () => {
+    try { const r = await apiFetch('/api/metrics/equity-curve?days=90'); if (r.ok) setEquityCurve(await r.json()) } catch {}
+  }
 
   const handleScanNow = async () => {
     try { await apiFetch('/api/autopilot/scan-now', { method: 'POST' }) } catch {}
   }
 
   useEffect(() => {
-    fetchMetrics(); fetchAccount(); fetchPositions(); fetchPnlHistory(); fetchAutopilot(); fetchActivity(); fetchAiDecisions(); fetchCalendar()
+    fetchMetrics(); fetchAccount(); fetchPositions(); fetchPnlHistory(); fetchAutopilot(); fetchActivity(); fetchAiDecisions(); fetchCalendar(); fetchEquityCurve()
     const interval = setInterval(() => { fetchMetrics(); fetchPositions(); fetchAutopilot(); fetchActivity(); fetchAiDecisions(); fetchCalendar() }, 10000)
     const accountInterval = setInterval(fetchAccount, 60000)
     return () => { clearInterval(interval); clearInterval(accountInterval) }
@@ -426,6 +433,65 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Equity Curve */}
+      {equityCurve && equityCurve.curve.length > 0 && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" /></svg>
+              <h3 className="text-sm font-medium text-white">Equity Curve (90 jours)</h3>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-gray-500">Initial: <span className="text-white">{equityCurve.initial_balance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR</span></span>
+              <span className="text-gray-500">P&L: <span className={equityCurve.total_pnl >= 0 ? 'text-profit' : 'text-loss'}>{equityCurve.total_pnl >= 0 ? '+' : ''}{equityCurve.total_pnl.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}</span></span>
+              <span className="text-gray-500">Max DD: <span className="text-loss">{equityCurve.max_drawdown_pct.toFixed(1)}%</span></span>
+            </div>
+          </div>
+          <div className="relative h-52">
+            {/* Y axis labels */}
+            {(() => {
+              const equities = equityCurve.curve.map(p => p.equity)
+              const minEq = Math.min(...equities)
+              const maxEq = Math.max(...equities)
+              const range = maxEq - minEq || 1
+              return (
+                <>
+                  <div className="absolute left-0 top-0 text-[10px] text-gray-600">{maxEq.toFixed(0)}</div>
+                  <div className="absolute left-0 bottom-0 text-[10px] text-gray-600">{minEq.toFixed(0)}</div>
+                  {/* SVG line chart */}
+                  <svg className="w-full h-full" viewBox={`0 0 ${equityCurve.curve.length} 100`} preserveAspectRatio="none">
+                    {/* Area fill */}
+                    <path
+                      d={`M0,${100 - ((equityCurve.curve[0].equity - minEq) / range) * 100} ${equityCurve.curve.map((p, i) => `L${i},${100 - ((p.equity - minEq) / range) * 100}`).join(' ')} L${equityCurve.curve.length - 1},100 L0,100 Z`}
+                      fill="url(#equityGradient)"
+                    />
+                    {/* Line */}
+                    <polyline
+                      points={equityCurve.curve.map((p, i) => `${i},${100 - ((p.equity - minEq) / range) * 100}`).join(' ')}
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="0.8"
+                    />
+                    <defs>
+                      <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </>
+              )
+            })()}
+          </div>
+          {/* X axis labels */}
+          <div className="flex justify-between mt-1 text-[10px] text-gray-600">
+            <span>{equityCurve.curve[0]?.date}</span>
+            {equityCurve.curve.length > 10 && <span>{equityCurve.curve[Math.floor(equityCurve.curve.length / 2)]?.date}</span>}
+            <span>{equityCurve.curve[equityCurve.curve.length - 1]?.date}</span>
+          </div>
+        </div>
+      )}
 
       {/* Economic Calendar */}
       {calendar && calendar.total_events > 0 && (

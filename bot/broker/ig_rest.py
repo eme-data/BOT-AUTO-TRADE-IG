@@ -68,6 +68,7 @@ class IGRestClient(BrokerClient):
         self._loop = asyncio.get_event_loop()
         self._connected = False
         self._last_reconnect: float = 0  # timestamp of last reconnect
+        self._reconnect_count: int = 0
 
     def _run_sync(self, func, *args, **kwargs):
         """Run a synchronous trading_ig call in a thread executor."""
@@ -92,7 +93,8 @@ class IGRestClient(BrokerClient):
             logger.debug("ig_reconnect_cooldown", wait=int(self.RECONNECT_COOLDOWN - (now - self._last_reconnect)))
             return  # skip, too soon since last reconnect
         self._last_reconnect = now
-        logger.info("ig_reconnecting")
+        self._reconnect_count += 1
+        logger.info("ig_reconnecting", attempt=self._reconnect_count)
         self._connected = False
         try:
             if self._ig:
@@ -100,6 +102,30 @@ class IGRestClient(BrokerClient):
         except Exception:
             pass
         await self.connect()
+        # Notify via Telegram on reconnection
+        try:
+            from bot.notifications import send_message
+            await send_message(
+                f"\U0001f504 <b>IG Session Reconnected</b>\n"
+                f"Reconnection #{self._reconnect_count}"
+            )
+        except Exception:
+            pass
+
+    async def heartbeat(self) -> bool:
+        """Check if the IG session is alive. Returns True if healthy, reconnects if not."""
+        if not self._connected or not self._ig:
+            return False
+        try:
+            await self._run_sync(self._ig.fetch_accounts)
+            return True
+        except Exception as e:
+            logger.warning("ig_heartbeat_failed", error=str(e))
+            try:
+                await self.reconnect()
+                return self._connected
+            except Exception:
+                return False
 
     async def disconnect(self) -> None:
         self._connected = False

@@ -200,6 +200,76 @@ async def _fetch_ig_balance(db: AsyncSession, redis) -> float:
     return account_data["balance"] if account_data else 0.0
 
 
+@router.get("/equity-curve")
+async def get_equity_curve(
+    days: int = Query(default=90, le=365),
+    db: AsyncSession = Depends(get_db),
+    _user: AdminUser = Depends(get_current_user),
+):
+    """Get equity curve: daily balance over time (starting balance + cumulative P&L)."""
+    # Get starting balance from Redis or IG
+    starting_balance = 0.0
+    try:
+        r = await get_redis()
+        cached = await r.get("ig:account_balance")
+        if cached:
+            starting_balance = float(cached)
+    except Exception:
+        pass
+
+    # Get daily P&L
+    result = await db.execute(
+        select(
+            cast(Trade.closed_at, Date).label("day"),
+            func.sum(Trade.profit).label("pnl"),
+            func.count(Trade.id).label("trades"),
+            func.count(Trade.id).filter(Trade.profit > 0).label("wins"),
+        )
+        .where(Trade.status == "CLOSED", Trade.closed_at.isnot(None))
+        .group_by(cast(Trade.closed_at, Date))
+        .order_by(cast(Trade.closed_at, Date))
+        .limit(days)
+    )
+    rows = result.all()
+
+    total_pnl = sum(float(r.pnl or 0) for r in rows)
+    # Infer initial balance: current - total_pnl
+    initial_balance = starting_balance - total_pnl if starting_balance > 0 else 0
+
+    cumulative = 0.0
+    curve = []
+    max_equity = initial_balance
+    max_drawdown = 0.0
+
+    for row in rows:
+        daily = float(row.pnl or 0)
+        cumulative += daily
+        equity = initial_balance + cumulative
+        if equity > max_equity:
+            max_equity = equity
+        dd = ((max_equity - equity) / max_equity * 100) if max_equity > 0 else 0
+        if dd > max_drawdown:
+            max_drawdown = dd
+
+        curve.append({
+            "date": str(row.day),
+            "equity": round(equity, 2),
+            "daily_pnl": round(daily, 2),
+            "cumulative_pnl": round(cumulative, 2),
+            "trades": row.trades,
+            "wins": row.wins,
+            "drawdown_pct": round(dd, 2),
+        })
+
+    return {
+        "initial_balance": round(initial_balance, 2),
+        "current_balance": round(starting_balance, 2),
+        "total_pnl": round(total_pnl, 2),
+        "max_drawdown_pct": round(max_drawdown, 2),
+        "curve": curve,
+    }
+
+
 @router.get("/account", response_model=AccountResponse)
 async def get_account(
     db: AsyncSession = Depends(get_db),

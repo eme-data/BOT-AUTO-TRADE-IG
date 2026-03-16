@@ -236,6 +236,7 @@ class TradingBot:
         self.scheduler.add_job(self._reconcile_positions, "interval", minutes=2, id="reconcile")
         self.scheduler.add_job(self._update_account_metrics, "interval", minutes=1, id="account_metrics")
         self.scheduler.add_job(self._refresh_calendar, "interval", hours=6, id="refresh_calendar")
+        self.scheduler.add_job(self._heartbeat_ig, "interval", minutes=5, id="ig_heartbeat")
         # Weekly report: every Sunday at 20:00 UTC
         self.scheduler.add_job(generate_weekly_report, "cron", day_of_week="sun", hour=20, minute=0, id="weekly_report")
         self.scheduler.start()
@@ -795,6 +796,15 @@ class TradingBot:
                 logger.debug("vix_publish_error", error=str(ve))
         except Exception as e:
             logger.error("account_metrics_error", error=str(e))
+
+    async def _heartbeat_ig(self) -> None:
+        """Periodic IG session health check with auto-reconnect."""
+        try:
+            healthy = await self.broker.heartbeat()
+            if not healthy:
+                await self._publish_log("WARNING", "IG session lost — reconnection attempted")
+        except Exception as e:
+            logger.error("heartbeat_error", error=str(e))
 
     async def _refresh_calendar(self) -> None:
         """Refresh economic calendar events."""

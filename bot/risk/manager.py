@@ -106,6 +106,26 @@ class RiskManager:
                     )
                     return None
 
+        # Spread filter — reject if spread is too wide relative to stop distance
+        try:
+            market_info = await self.broker.get_market_info(signal.epic)
+            spread = market_info.offer - market_info.bid
+            stop_dist = signal.stop_distance or self.config.default_stop_distance
+            # Reject if spread > 30% of stop distance (too expensive to enter)
+            if stop_dist > 0 and spread > 0:
+                spread_pct = (spread / stop_dist) * 100
+                if spread_pct > 30:
+                    logger.warning(
+                        "risk_spread_too_wide",
+                        epic=signal.epic,
+                        spread=round(spread, 4),
+                        stop_distance=stop_dist,
+                        spread_pct=round(spread_pct, 1),
+                    )
+                    return None
+        except Exception as e:
+            logger.debug("spread_check_failed", epic=signal.epic, error=str(e))
+
         # Calculate position size
         size = await self._calculate_size(signal)
         if size <= 0:
