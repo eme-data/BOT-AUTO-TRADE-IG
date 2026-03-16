@@ -210,12 +210,12 @@ async def load_settings_from_db() -> None:
 
 
 _AUTOPILOT_DEFAULTS = {
-    "autopilot_scan_interval_minutes": ("60", "autopilot"),
-    "autopilot_min_score_threshold": ("0.35", "autopilot"),
+    "autopilot_scan_interval_minutes": ("30", "autopilot"),
+    "autopilot_min_score_threshold": ("0.50", "autopilot"),
     "autopilot_search_terms": ("EUR/USD,GBP/USD,US 500,Gold", "autopilot"),
     "autopilot_api_budget_per_cycle": ("15", "autopilot"),
     "autopilot_max_active_markets": ("3", "autopilot"),
-    "autopilot_shadow_mode": ("true", "autopilot"),  # Safe default: paper trading ON
+    "autopilot_shadow_mode": ("false", "autopilot"),
 }
 
 
@@ -230,11 +230,9 @@ async def _ensure_autopilot_defaults() -> dict[str, str]:
     from bot.db.session import async_session_factory
 
     # Values that are known-bad from earlier versions and should be force-updated
-    _FORCE_UPDATE = {
-        "autopilot_scan_interval_minutes": lambda v: v and int(v) < 60,
+    _FORCE_UPDATE: dict[str, object] = {
         "autopilot_search_terms": lambda v: v and v.count(",") > 4,
         "autopilot_api_budget_per_cycle": lambda v: v and int(v) > 15,
-        "autopilot_min_score_threshold": lambda v: v and float(v) > 0.40,
     }
 
     corrected: dict[str, str] = {}
