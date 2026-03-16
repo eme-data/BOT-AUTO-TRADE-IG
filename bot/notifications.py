@@ -119,3 +119,63 @@ async def notify_bot_status(status: str, detail: str = "") -> None:
     if detail:
         text += f"\n{detail}"
     await send_message(text)
+
+
+async def notify_autopilot_activation(epic: str, strategy: str, score: float, regime: str) -> None:
+    """Notify when autopilot activates a new market strategy."""
+    text = (
+        f"\U0001f916 <b>Autopilot Activated</b>\n"
+        f"Market: <code>{epic}</code>\n"
+        f"Strategy: {strategy}\n"
+        f"Score: {score:.0%} | Regime: {regime}"
+    )
+    await send_message(text)
+
+
+async def notify_autopilot_scan(active: int, scored: int, qualified: int) -> None:
+    """Notify scan cycle summary."""
+    text = (
+        f"\U0001f50d <b>Autopilot Scan</b>\n"
+        f"Scored: {scored} | Qualified: {qualified} | Active: {active}"
+    )
+    await send_message(text)
+
+
+async def notify_ai_decision(epic: str, verdict: str, reasoning: str, strategy: str) -> None:
+    """Notify when AI validates or rejects a trade."""
+    icons = {"approve": "\u2705", "adjust": "\u2699\ufe0f", "reject": "\u274c"}
+    icon = icons.get(verdict.lower(), "\U0001f916")
+    text = (
+        f"{icon} <b>AI {verdict.upper()}</b>\n"
+        f"Epic: <code>{epic}</code>\n"
+        f"Strategy: {strategy}\n"
+        f"Reason: {reasoning[:200]}"
+    )
+    await send_message(text)
+
+
+async def notify_drawdown_warning(daily_pnl: float, limit: float, pct_used: float) -> None:
+    """Notify when drawdown reaches 50% or 80% of the daily limit."""
+    if pct_used >= 80:
+        icon = "\U0001f534"
+        level = "CRITICAL"
+    else:
+        icon = "\U0001f7e1"
+        level = "WARNING"
+    text = (
+        f"{icon} <b>Drawdown {level}</b>\n"
+        f"Daily P&L: <b>{daily_pnl:.2f}</b>\n"
+        f"Limit: -{limit:.0f} ({pct_used:.0f}% consumed)"
+    )
+    await send_message(text)
+
+
+async def notify_trailing_stop_breakeven(deal_id: str, epic: str) -> None:
+    """Notify when a position moves to breakeven."""
+    text = (
+        f"\U0001f512 <b>Breakeven Activated</b>\n"
+        f"Epic: <code>{epic}</code>\n"
+        f"Deal: <code>{deal_id}</code>\n"
+        f"Stop moved to entry price"
+    )
+    await send_message(text)

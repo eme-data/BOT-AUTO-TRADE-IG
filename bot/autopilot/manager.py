@@ -8,6 +8,7 @@ import structlog
 
 from bot.autopilot.models import AutoPilotConfig, MarketScore
 from bot.autopilot.scanner import MarketScanner
+from bot.notifications import notify_autopilot_activation, notify_autopilot_scan
 from bot.autopilot.scorer import MarketScorer
 from bot.autopilot.selector import StrategySelector
 from bot.db.session import async_session_factory
@@ -164,6 +165,7 @@ class AutoPilotManager:
                 active=len(self._active_strategies),
             )
             await self._log_activity("INFO", f"Scan complete: {len(self._active_strategies)} active strategies")
+            await notify_autopilot_scan(len(self._active_strategies), len(scores), len(qualified))
 
         except Exception as e:
             err_str = str(e).lower()
@@ -212,6 +214,7 @@ class AutoPilotManager:
             score=score.total_score,
             regime=score.regime,
         )
+        await notify_autopilot_activation(score.epic, strategy_type, score.total_score, score.regime)
         await self._log_activity(
             "INFO",
             f"Activated {score.instrument_name or score.epic} → {strategy_type} (score: {score.total_score:.0%}, regime: {score.regime})",

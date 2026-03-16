@@ -12,3 +12,4 @@ class RiskConfig:
     max_risk_per_trade_pct: float = 2.0  # % of account balance
     default_stop_distance: int = 20
     default_limit_distance: int = 40
+    drawdown_auto_disable: bool = True  # auto-disable bot on max daily loss

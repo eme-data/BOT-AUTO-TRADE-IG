@@ -33,7 +33,14 @@ from bot.metrics import (
     TICK_RATE,
     start_metrics_server,
 )
-from bot.notifications import load_telegram_settings, notify_bot_status, notify_trade_opened
+from bot.notifications import (
+    load_telegram_settings,
+    notify_ai_decision,
+    notify_bot_status,
+    notify_drawdown_warning,
+    notify_trade_opened,
+    notify_trailing_stop_breakeven,
+)
 from bot.ai.analyzer import ClaudeAnalyzer
 from bot.ai.models import AIVerdict
 from bot.db.repository import AIAnalysisRepository
@@ -372,6 +379,13 @@ class TradingBot:
                 self.trailing_stop.amend_positions(updates),
                 self._loop,
             )
+            # Notify breakeven activations via Telegram
+            for u in updates:
+                if u.breakeven_activated and u.current_stop == u.entry_price:
+                    asyncio.run_coroutine_threadsafe(
+                        notify_trailing_stop_breakeven(u.deal_id, u.epic),
+                        self._loop,
+                    )
 
         signals = self.registry.on_tick(tick)
         for strategy_name, signal in signals:
@@ -446,6 +460,14 @@ class TradingBot:
                         model_used=ai_result.model_used,
                         latency_ms=ai_result.latency_ms,
                     )
+
+                # Telegram notification for AI decisions
+                await notify_ai_decision(
+                    epic=signal.epic,
+                    verdict=ai_result.verdict.value,
+                    reasoning=ai_result.reasoning,
+                    strategy=strategy_name,
+                )
 
                 if ai_result.verdict == AIVerdict.REJECT:
                     ORDERS_REJECTED.labels(reason="ai_rejected").inc()
@@ -529,7 +551,7 @@ class TradingBot:
                     )
                     await signal_repo.create(sig)
 
-                # Register trailing stop tracking
+                # Register trailing stop tracking (ATR-based when available)
                 if signal.stop_distance:
                     self.trailing_stop.track_position(
                         deal_id=result.deal_id or result.deal_reference,
@@ -537,6 +559,7 @@ class TradingBot:
                         direction=order.direction,
                         entry_price=signal.indicators.get("price", 0),
                         trail_distance=signal.stop_distance,
+                        atr=signal.indicators.get("atr"),
                     )
 
                 # Telegram notification
@@ -678,11 +701,54 @@ class TradingBot:
             logger.error("reconcile_error", error=str(e))
 
     async def _update_account_metrics(self) -> None:
-        """Update account balance metrics and publish to Redis for the dashboard."""
+        """Update account balance metrics, check drawdown, and publish to Redis."""
         try:
             balance = await self.broker.get_account_balance()
             ACCOUNT_BALANCE.set(balance.get("balance", 0))
-            DAILY_PNL.set(balance.get("profit_loss", 0))
+            daily_pnl = balance.get("profit_loss", 0)
+            DAILY_PNL.set(daily_pnl)
+
+            # Drawdown warnings at 50% and 80% of daily limit
+            if daily_pnl < 0 and self.risk_manager.config.max_daily_loss > 0:
+                pct_used = abs(daily_pnl) / self.risk_manager.config.max_daily_loss * 100
+                drawdown_key = f"drawdown_warned_{int(pct_used // 50) * 50}"
+                r = await self._get_redis()
+                already_warned = await r.get(drawdown_key)
+                if pct_used >= 50 and not already_warned:
+                    await notify_drawdown_warning(daily_pnl, self.risk_manager.config.max_daily_loss, pct_used)
+                    await r.set(drawdown_key, "1", ex=86400)  # warn once per day
+
+            # Drawdown auto-disable: shut down trading if daily loss exceeds limit
+            if (
+                self.risk_manager.config.drawdown_auto_disable
+                and daily_pnl <= -self.risk_manager.config.max_daily_loss
+                and self._running
+            ):
+                logger.warning(
+                    "drawdown_auto_disable",
+                    daily_pnl=daily_pnl,
+                    limit=self.risk_manager.config.max_daily_loss,
+                )
+                await self._publish_log(
+                    "ERROR",
+                    f"DRAWDOWN LIMIT: Daily loss {daily_pnl:.2f} exceeds -{self.risk_manager.config.max_daily_loss:.0f}. "
+                    f"Auto-pilot disabled, all positions flagged.",
+                )
+                # Disable autopilot to stop new trades
+                if self.autopilot:
+                    await self._disable_autopilot()
+                # Close all open positions
+                closed = await self.risk_manager.check_and_close_losing_positions()
+                if closed:
+                    await self._publish_log("WARNING", f"Emergency closed {len(closed)} positions")
+                # Notify via Telegram
+                from bot.notifications import send_message
+                await send_message(
+                    f"\U0001f6a8 <b>DRAWDOWN LIMIT REACHED</b>\n"
+                    f"Daily P&L: <b>{daily_pnl:.2f}</b>\n"
+                    f"Limit: -{self.risk_manager.config.max_daily_loss:.0f}\n"
+                    f"Auto-pilot disabled, {len(closed)} positions closed."
+                )
 
             # Publish to Redis so the dashboard doesn't need its own IG session
             r = await self._get_redis()
