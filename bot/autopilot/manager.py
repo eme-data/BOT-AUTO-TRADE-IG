@@ -35,11 +35,23 @@ class AutoPilotManager:
         self._active_strategies: dict[str, str] = {}  # epic -> strategy registry name
         self._quota_backoff_until: datetime | None = None  # skip scans until this time
         self._score_cache: dict[str, MarketScore] = {}  # epic -> cached score
-        self._score_cache_ttl = timedelta(minutes=30)  # reuse scores within this window
+        self._score_cache_ttl = timedelta(hours=4)  # reuse scores within this window
 
     async def run_scan_cycle(self) -> None:
         """Main autopilot cycle: scan -> score -> select -> activate."""
         if not self.config.enabled:
+            return
+
+        # Only scan during market hours: Mon-Fri 06:00-18:00 UTC
+        now_utc = datetime.utcnow()
+        if now_utc.weekday() >= 5:  # Saturday=5, Sunday=6
+            await self._log_activity("INFO", "Skipping scan — weekend (markets closed)")
+            return
+        if not (6 <= now_utc.hour < 18):
+            await self._log_activity(
+                "INFO",
+                f"Skipping scan — outside market hours (current: {now_utc.strftime('%H:%M')} UTC, active: 06:00-18:00)",
+            )
             return
 
         # Skip scan if we're in quota backoff mode
@@ -76,7 +88,9 @@ class AutoPilotManager:
             await self._log_activity("INFO", f"Found {len(candidates)} candidate markets")
 
             # 2. Score each market (respecting API budget, using cache)
-            api_budget = self.config.api_budget_per_cycle
+            # Max 2 fresh scores per cycle to conserve IG historical data quota
+            max_fresh_per_cycle = 2
+            fresh_scored = 0
             scores: list[MarketScore] = []
             now = datetime.utcnow()
 
@@ -92,13 +106,16 @@ class AutoPilotManager:
                     )
                     continue
 
-                if api_budget < 2:
-                    await self._log_activity("WARN", "API budget exhausted, stopping scoring")
-                    break
+                if fresh_scored >= max_fresh_per_cycle:
+                    await self._log_activity(
+                        "INFO",
+                        f"Deferred {market.instrument_name or market.epic} — max {max_fresh_per_cycle} fresh scores per cycle",
+                    )
+                    continue
                 score = await self.scorer.score_market(market.epic, market.instrument_name)
                 scores.append(score)
                 self._score_cache[score.epic] = score  # cache for next cycle
-                api_budget -= 2  # 2 timeframes per market (HOUR + DAY)
+                fresh_scored += 1
                 await self._log_activity(
                     "INFO",
                     f"Scored {market.instrument_name or market.epic}: {score.total_score:.0%} ({score.regime})",
@@ -152,7 +169,7 @@ class AutoPilotManager:
             err_str = str(e).lower()
             if "exceeded" in err_str or "allowance" in err_str:
                 # IG quota exhausted — back off for 6 hours instead of retrying every cycle
-                self._quota_backoff_until = datetime.utcnow() + timedelta(hours=6)
+                self._quota_backoff_until = datetime.utcnow() + timedelta(hours=3)
                 logger.warning("autopilot_quota_backoff_set", until=self._quota_backoff_until.isoformat())
                 await self._log_activity(
                     "ERROR",
