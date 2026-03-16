@@ -10,6 +10,15 @@ interface Account {
   preferred: boolean
 }
 
+interface IGAccountEntry {
+  id: number
+  label: string
+  username: string
+  acc_type: string
+  acc_number: string
+  is_active: boolean
+}
+
 export default function IGSettings() {
   const apiFetch = useApiFetch()
   const [apiKey, setApiKey] = useState('')
@@ -22,6 +31,18 @@ export default function IGSettings() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [configured, setConfigured] = useState(false)
+
+  // Multi-account
+  const [igAccounts, setIgAccounts] = useState<IGAccountEntry[]>([])
+  const [newLabel, setNewLabel] = useState('')
+  const [newApiKey, setNewApiKey] = useState('')
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newAccType, setNewAccType] = useState('LIVE')
+  const [newAccNumber, setNewAccNumber] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addingAccount, setAddingAccount] = useState(false)
+  const [activating, setActivating] = useState<number | null>(null)
 
   // AI Settings
   const [aiEnabled, setAiEnabled] = useState(false)
@@ -36,7 +57,66 @@ export default function IGSettings() {
   useEffect(() => {
     loadSettings()
     loadAiSettings()
+    loadIgAccounts()
   }, [])
+
+  const loadIgAccounts = async () => {
+    try {
+      const res = await apiFetch('/api/accounts')
+      if (res.ok) setIgAccounts(await res.json())
+    } catch { /* */ }
+  }
+
+  const handleAddAccount = async () => {
+    if (!newLabel || !newApiKey || !newUsername || !newPassword) return
+    setAddingAccount(true)
+    try {
+      const res = await apiFetch('/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({
+          label: newLabel, api_key: newApiKey, username: newUsername,
+          password: newPassword, acc_type: newAccType, acc_number: newAccNumber,
+        }),
+      })
+      if (res.ok) {
+        setShowAddForm(false)
+        setNewLabel(''); setNewApiKey(''); setNewUsername(''); setNewPassword(''); setNewAccNumber('')
+        await loadIgAccounts()
+        setMessage({ type: 'success', text: 'Account added' })
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message })
+    } finally {
+      setAddingAccount(false)
+    }
+  }
+
+  const handleActivateAccount = async (id: number) => {
+    setActivating(id)
+    try {
+      const res = await apiFetch(`/api/accounts/${id}/activate`, { method: 'POST' })
+      if (res.ok) {
+        await loadIgAccounts()
+        setMessage({ type: 'success', text: 'Account activated. Bot reloading settings...' })
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message })
+    } finally {
+      setActivating(null)
+    }
+  }
+
+  const handleDeleteAccount = async (id: number) => {
+    if (!confirm('Delete this account?')) return
+    try {
+      const res = await apiFetch(`/api/accounts/${id}`, { method: 'DELETE' })
+      if (res.ok) await loadIgAccounts()
+      else {
+        const err = await res.json()
+        setMessage({ type: 'error', text: err.detail })
+      }
+    } catch { /* */ }
+  }
 
   const loadSettings = async () => {
     try {
@@ -293,6 +373,101 @@ export default function IGSettings() {
           </div>
         </div>
       )}
+
+      {/* Multi-Account Management */}
+      <h2 className="text-xl font-semibold text-white pt-4">Multi-Account</h2>
+      <div className="card p-6 space-y-4">
+        {igAccounts.length > 0 ? (
+          <div className="space-y-2">
+            {igAccounts.map((acc) => (
+              <div
+                key={acc.id}
+                className={`flex items-center justify-between p-3 rounded-lg border ${
+                  acc.is_active ? 'border-profit bg-profit/10' : 'border-border'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {acc.is_active && <span className="w-2 h-2 rounded-full bg-profit animate-pulse" />}
+                  <div>
+                    <span className="font-medium text-white">{acc.label}</span>
+                    <span className="text-xs text-gray-500 ml-2">{acc.username} · {acc.acc_type}</span>
+                    {acc.acc_number && <span className="text-xs text-gray-600 ml-1">({acc.acc_number})</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {acc.is_active ? (
+                    <span className="badge-profit text-xs">Active</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleActivateAccount(acc.id)}
+                        disabled={activating === acc.id}
+                        className="text-xs text-accent hover:text-blue-300 font-medium"
+                      >
+                        {activating === acc.id ? 'Activating...' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAccount(acc.id)}
+                        className="text-xs text-gray-500 hover:text-loss"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">No accounts configured yet. Add one below or use the form above for quick setup.</p>
+        )}
+
+        {showAddForm ? (
+          <div className="space-y-3 border border-border rounded-lg p-4">
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">Label</label>
+              <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="e.g., Live Principal" className="input" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">API Key</label>
+                <input type="password" value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">Username</label>
+                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} className="input" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">Password</label>
+                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">Type</label>
+                <select value={newAccType} onChange={(e) => setNewAccType(e.target.value)} className="input">
+                  <option value="LIVE">LIVE</option>
+                  <option value="DEMO">DEMO</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">Account #</label>
+                <input value={newAccNumber} onChange={(e) => setNewAccNumber(e.target.value)} className="input" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleAddAccount} disabled={addingAccount} className="btn-primary">
+                {addingAccount ? 'Adding...' : 'Add Account'}
+              </button>
+              <button onClick={() => setShowAddForm(false)} className="text-sm text-gray-500 hover:text-white">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAddForm(true)} className="text-sm text-accent hover:text-blue-300 font-medium">
+            + Add IG Account
+          </button>
+        )}
+      </div>
 
       {/* AI Analysis Settings */}
       <h2 className="text-xl font-semibold text-white pt-4">AI Analysis (Claude)</h2>

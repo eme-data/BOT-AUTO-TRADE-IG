@@ -44,6 +44,7 @@ from bot.notifications import (
 from bot.ai.analyzer import ClaudeAnalyzer
 from bot.ai.models import AIVerdict
 from bot.db.repository import AIAnalysisRepository
+from bot.reports.weekly import generate_weekly_report
 from bot.risk.manager import RiskManager
 from bot.risk.models import RiskConfig
 from bot.risk.trading_sessions import is_market_open
@@ -235,6 +236,8 @@ class TradingBot:
         self.scheduler.add_job(self._reconcile_positions, "interval", minutes=2, id="reconcile")
         self.scheduler.add_job(self._update_account_metrics, "interval", minutes=1, id="account_metrics")
         self.scheduler.add_job(self._refresh_calendar, "interval", hours=6, id="refresh_calendar")
+        # Weekly report: every Sunday at 20:00 UTC
+        self.scheduler.add_job(generate_weekly_report, "cron", day_of_week="sun", hour=20, minute=0, id="weekly_report")
         self.scheduler.start()
 
         # Initialize Auto-Pilot if enabled
@@ -372,8 +375,8 @@ class TradingBot:
         """Handle tick from streaming thread (synchronous callback)."""
         TICK_RATE.labels(epic=tick.epic).inc()
 
-        # Update trailing stops
-        updates = self.trailing_stop.on_tick(tick)
+        # Update trailing stops and check for partial exits
+        updates, partial_exits = self.trailing_stop.on_tick(tick)
         if updates:
             asyncio.run_coroutine_threadsafe(
                 self.trailing_stop.amend_positions(updates),
@@ -386,6 +389,11 @@ class TradingBot:
                         notify_trailing_stop_breakeven(u.deal_id, u.epic),
                         self._loop,
                     )
+        if partial_exits:
+            asyncio.run_coroutine_threadsafe(
+                self.trailing_stop.execute_partial_exits(partial_exits),
+                self._loop,
+            )
 
         signals = self.registry.on_tick(tick)
         for strategy_name, signal in signals:
@@ -558,6 +566,7 @@ class TradingBot:
                         epic=order.epic,
                         direction=order.direction,
                         entry_price=signal.indicators.get("price", 0),
+                        size=order.size,
                         trail_distance=signal.stop_distance,
                         atr=signal.indicators.get("atr"),
                     )

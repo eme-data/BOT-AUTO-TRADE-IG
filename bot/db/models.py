@@ -37,6 +37,27 @@ class AdminUser(Base):
 # =====================
 # Application settings (key-value, sensitive values encrypted)
 # =====================
+# =====================
+# IG Accounts (multi-account support)
+# =====================
+class IGAccount(Base):
+    __tablename__ = "ig_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g. "Live Principal"
+    api_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    username: Mapped[str] = mapped_column(String(100), nullable=False)
+    password: Mapped[str] = mapped_column(String(255), nullable=False)  # encrypted
+    acc_type: Mapped[str] = mapped_column(String(10), nullable=False, default="LIVE")
+    acc_number: Mapped[str] = mapped_column(String(50), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)  # only one active at a time
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_ig_accounts_active", "is_active"),
+    )
+
+
 class AppSetting(Base):
     __tablename__ = "app_settings"
 

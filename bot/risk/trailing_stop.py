@@ -25,6 +25,19 @@ TIGHTEN_THRESHOLDS = [
 # Breakeven activation: move stop to entry when profit reaches 1x trail distance
 BREAKEVEN_MULTIPLIER = 1.0
 
+# Partial exit: close 50% when profit reaches 1.5x trail distance
+PARTIAL_EXIT_MULTIPLIER = 1.5
+PARTIAL_EXIT_PCT = 0.50  # close 50% of the position
+
+
+@dataclass
+class PartialExitRequest:
+    """Request to partially close a position."""
+    deal_id: str
+    epic: str
+    direction: Direction
+    close_size: float  # size to close
+
 
 @dataclass
 class TrailingStopState:
@@ -33,12 +46,14 @@ class TrailingStopState:
     epic: str
     direction: Direction
     entry_price: float
-    trail_distance: float  # points to trail behind (base distance)
+    original_size: float = 0.0  # initial position size for partial exit calc
+    trail_distance: float = 0.0  # points to trail behind (base distance)
     initial_trail_distance: float = 0.0  # original distance for tightening calc
     highest_price: float = 0.0  # for BUY positions
     lowest_price: float = float("inf")  # for SELL positions
     current_stop: float | None = None
     breakeven_activated: bool = False
+    partial_exit_done: bool = False  # whether 50% was already closed
     last_updated: datetime = field(default_factory=datetime.now)
 
 
@@ -65,6 +80,7 @@ class TrailingStopManager:
         epic: str,
         direction: Direction,
         entry_price: float,
+        size: float = 0.0,
         trail_distance: float | None = None,
         atr: float | None = None,
         initial_stop: float | None = None,
@@ -73,6 +89,7 @@ class TrailingStopManager:
 
         If *atr* is provided, trail_distance = ATR * 1.5 (dynamic).
         Otherwise uses the explicit trail_distance or the default.
+        *size* is needed for partial exit calculation.
         """
         if atr and atr > 0:
             dist = round(atr * ATR_TRAIL_MULTIPLIER, 2)
@@ -85,6 +102,7 @@ class TrailingStopManager:
             epic=epic,
             direction=direction,
             entry_price=entry_price,
+            original_size=size,
             trail_distance=dist,
             initial_trail_distance=dist,
             current_stop=initial_stop,
@@ -102,18 +120,42 @@ class TrailingStopManager:
         """Stop tracking a position."""
         self._tracked.pop(deal_id, None)
 
-    def on_tick(self, tick: Tick) -> list[TrailingStopState]:
+    def on_tick(self, tick: Tick) -> tuple[list[TrailingStopState], list[PartialExitRequest]]:
         """
-        Process a tick and return list of positions that need stop updates.
-        Call amend_positions() after to actually update the broker.
+        Process a tick and return:
+        - list of positions that need stop updates
+        - list of partial exit requests (50% close at first target)
+        Call amend_positions() and execute_partial_exits() after.
         """
         updates = []
+        partial_exits = []
         for state in self._tracked.values():
             if state.epic != tick.epic:
                 continue
 
             mid = tick.mid
             updated = False
+
+            # --- Partial exit: close 50% at 1.5x trail distance profit ---
+            if not state.partial_exit_done and state.original_size > 0:
+                profit_pts = (mid - state.entry_price) if state.direction == Direction.BUY else (state.entry_price - mid)
+                if profit_pts >= state.initial_trail_distance * PARTIAL_EXIT_MULTIPLIER:
+                    close_size = round(state.original_size * PARTIAL_EXIT_PCT, 2)
+                    if close_size > 0:
+                        partial_exits.append(PartialExitRequest(
+                            deal_id=state.deal_id,
+                            epic=state.epic,
+                            direction=state.direction,
+                            close_size=close_size,
+                        ))
+                        state.partial_exit_done = True
+                        logger.info(
+                            "trailing_stop_partial_exit",
+                            deal_id=state.deal_id,
+                            epic=state.epic,
+                            close_size=close_size,
+                            profit_pts=round(profit_pts, 2),
+                        )
 
             # --- Breakeven logic ---
             if not state.breakeven_activated:
@@ -169,7 +211,7 @@ class TrailingStopManager:
             if updated:
                 updates.append(state)
 
-        return updates
+        return updates, partial_exits
 
     async def amend_positions(self, updates: list[TrailingStopState]) -> None:
         """Amend stop levels on the broker for positions that need updating."""
@@ -191,6 +233,25 @@ class TrailingStopManager:
                 )
             except Exception as e:
                 logger.error("trailing_stop_amend_error", deal_id=state.deal_id, error=str(e))
+
+    async def execute_partial_exits(self, exits: list[PartialExitRequest]) -> list[str]:
+        """Close partial positions on the broker. Returns list of deal_ids closed."""
+        closed = []
+        for req in exits:
+            try:
+                close_dir = "SELL" if req.direction == Direction.BUY else "BUY"
+                result = await self.broker.close_position(req.deal_id, close_dir, req.close_size)
+                logger.info(
+                    "partial_exit_executed",
+                    deal_id=req.deal_id,
+                    epic=req.epic,
+                    close_size=req.close_size,
+                    status=result.status,
+                )
+                closed.append(req.deal_id)
+            except Exception as e:
+                logger.error("partial_exit_error", deal_id=req.deal_id, error=str(e))
+        return closed
 
     @property
     def tracked_count(self) -> int:

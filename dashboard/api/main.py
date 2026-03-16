@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from dashboard.api.deps import close_redis, get_redis
 from dashboard.api.routers import (
+    accounts,
     ai,
     auth,
     autopilot,
@@ -103,6 +104,7 @@ app.include_router(users.router)
 app.include_router(autopilot.router)
 app.include_router(ai.router)
 app.include_router(calendar.router)
+app.include_router(accounts.router)
 app.include_router(ws.router)
 
 
