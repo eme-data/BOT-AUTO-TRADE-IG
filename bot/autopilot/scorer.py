@@ -12,9 +12,8 @@ from bot.data.indicators import add_all_indicators
 
 logger = structlog.get_logger()
 
-# Timeframe weights: daily most important, then H1
-# Using 2 TFs instead of 3 to conserve IG historical data quota
-TF_WEIGHTS = {"DAY": 0.55, "HOUR": 0.45}
+# Timeframe weights: DAY only to conserve IG historical data quota (1 API call per market)
+TF_WEIGHTS = {"DAY": 1.0}
 
 
 class MarketScorer:

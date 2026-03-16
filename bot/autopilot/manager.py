@@ -89,8 +89,8 @@ class AutoPilotManager:
             await self._log_activity("INFO", f"Found {len(candidates)} candidate markets")
 
             # 2. Score each market (respecting API budget, using cache)
-            # Max 2 fresh scores per cycle to conserve IG historical data quota
-            max_fresh_per_cycle = 2
+            # Max 1 fresh score per cycle to conserve IG historical data quota
+            max_fresh_per_cycle = 1
             fresh_scored = 0
             scores: list[MarketScore] = []
             now = datetime.utcnow()
@@ -175,7 +175,7 @@ class AutoPilotManager:
                 logger.warning("autopilot_quota_backoff_set", until=self._quota_backoff_until.isoformat())
                 await self._log_activity(
                     "ERROR",
-                    f"IG historical data quota exhausted — pausing scans for 6h (until {self._quota_backoff_until.strftime('%H:%M')} UTC)",
+                    f"IG historical data quota exhausted — pausing scans for 3h (until {self._quota_backoff_until.strftime('%H:%M')} UTC)",
                 )
             else:
                 logger.error("autopilot_scan_error", error=str(e))
