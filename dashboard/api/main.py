@@ -22,6 +22,7 @@ from dashboard.api.routers import (
     metrics,
     notifications,
     positions,
+    reports,
     settings,
     strategies,
     trades,
@@ -105,6 +106,7 @@ app.include_router(autopilot.router)
 app.include_router(ai.router)
 app.include_router(calendar.router)
 app.include_router(accounts.router)
+app.include_router(reports.router)
 app.include_router(ws.router)
 
 

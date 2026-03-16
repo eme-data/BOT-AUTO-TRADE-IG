@@ -30,9 +30,9 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain[:72], hashed)
 
 
-def create_access_token(username: str) -> str:
+def create_access_token(username: str, role: str = "admin") -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": username, "exp": expire}
+    payload = {"sub": username, "role": role, "exp": expire}
     return jwt.encode(payload, settings.dashboard.secret_key, algorithm=ALGORITHM)
 
 
@@ -58,4 +58,16 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+    return user
+
+
+async def require_admin(
+    user: AdminUser = Depends(get_current_user),
+) -> AdminUser:
+    """Dependency that ensures the user has admin role."""
+    if getattr(user, "role", "admin") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
     return user

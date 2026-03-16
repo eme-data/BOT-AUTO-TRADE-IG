@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import AdminUser
-from dashboard.api.auth.jwt import get_current_user, hash_password
+from dashboard.api.auth.jwt import get_current_user, hash_password, require_admin
 from dashboard.api.deps import get_db
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -17,12 +17,14 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 class UserListItem(BaseModel):
     id: int
     username: str
+    role: str = "admin"
     created_at: datetime | None = None
 
 
 class CreateUserRequest(BaseModel):
     username: str
     password: str
+    role: str = "viewer"  # default to viewer for safety
 
 
 class ResetPasswordRequest(BaseModel):
@@ -40,7 +42,7 @@ async def list_users(
     )
     users = result.scalars().all()
     return [
-        UserListItem(id=u.id, username=u.username, created_at=u.created_at)
+        UserListItem(id=u.id, username=u.username, role=getattr(u, "role", "admin"), created_at=u.created_at)
         for u in users
     ]
 
@@ -49,7 +51,7 @@ async def list_users(
 async def create_user(
     req: CreateUserRequest,
     db: AsyncSession = Depends(get_db),
-    _user: AdminUser = Depends(get_current_user),
+    _user: AdminUser = Depends(require_admin),
 ):
     """Create a new admin user."""
     if len(req.password) < 8:
@@ -67,24 +69,28 @@ async def create_user(
             detail=f"Username '{req.username}' already exists",
         )
 
+    if req.role not in ("admin", "viewer"):
+        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'viewer'")
+
     user = AdminUser(
         username=req.username,
         hashed_password=hash_password(req.password),
+        role=req.role,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    return UserListItem(id=user.id, username=user.username, created_at=user.created_at)
+    return UserListItem(id=user.id, username=user.username, role=user.role, created_at=user.created_at)
 
 
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: AdminUser = Depends(get_current_user),
+    current_user: AdminUser = Depends(require_admin),
 ):
-    """Delete an admin user. Cannot delete yourself or the last admin."""
+    """Delete a user. Requires admin role. Cannot delete yourself or the last admin."""
     if user_id == current_user.id:
         raise HTTPException(
             status_code=400, detail="Cannot delete your own account"

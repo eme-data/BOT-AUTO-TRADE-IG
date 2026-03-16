@@ -4,6 +4,7 @@ import { useApiFetch } from '../context/AuthContext'
 interface User {
   id: number
   username: string
+  role: string
   created_at: string | null
 }
 
@@ -16,6 +17,7 @@ export default function UserManagement() {
   // Create user form
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState('viewer')
   const [creating, setCreating] = useState(false)
 
   // Change password form
@@ -67,7 +69,7 @@ export default function UserManagement() {
     try {
       const res = await apiFetch('/api/users', {
         method: 'POST',
-        body: JSON.stringify({ username: newUsername, password: newPassword }),
+        body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
       })
       if (res.ok) {
         setMessage({ type: 'success', text: `User '${newUsername}' created` })
@@ -162,6 +164,9 @@ export default function UserManagement() {
             <div key={u.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-bg-primary">
               <div>
                 <span className="text-white font-medium">{u.username}</span>
+                <span className={`text-[10px] ml-2 px-1.5 py-0.5 rounded ${u.role === 'admin' ? 'bg-accent/15 text-accent' : 'bg-gray-500/15 text-gray-400'}`}>
+                  {u.role}
+                </span>
                 {u.username === currentUsername && (
                   <span className="text-xs text-blue-400 ml-2">(you)</span>
                 )}
@@ -216,6 +221,13 @@ export default function UserManagement() {
               minLength={8}
               className="input"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Role</label>
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="input">
+              <option value="viewer">Viewer (read-only)</option>
+              <option value="admin">Admin (full access)</option>
+            </select>
           </div>
           <button
             type="submit"

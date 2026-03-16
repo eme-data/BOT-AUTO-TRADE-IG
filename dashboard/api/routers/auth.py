@@ -69,6 +69,7 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     username: str
+    role: str = "admin"
     needs_setup: bool = False
     mfa_enabled: bool = False
 
@@ -140,7 +141,7 @@ async def login(
             )
 
     _clear_attempts(client_ip)
-    token = create_access_token(user.username)
+    token = create_access_token(user.username, getattr(user, "role", "admin"))
     return TokenResponse(access_token=token)
 
 
@@ -177,7 +178,7 @@ async def login_mfa(
             )
 
     _clear_attempts(client_ip)
-    token = create_access_token(user.username)
+    token = create_access_token(user.username, getattr(user, "role", "admin"))
     return TokenResponse(access_token=token)
 
 
@@ -186,6 +187,7 @@ async def get_me(user: AdminUser = Depends(get_current_user)):
     """Get current authenticated user info."""
     return UserResponse(
         username=user.username,
+        role=getattr(user, "role", "admin"),
         mfa_enabled=bool(user.totp_secret),
     )
 

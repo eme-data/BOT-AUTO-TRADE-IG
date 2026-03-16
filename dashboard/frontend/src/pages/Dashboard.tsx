@@ -446,6 +446,7 @@ export default function Dashboard() {
               <span className="text-gray-500">Initial: <span className="text-white">{equityCurve.initial_balance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR</span></span>
               <span className="text-gray-500">P&L: <span className={equityCurve.total_pnl >= 0 ? 'text-profit' : 'text-loss'}>{equityCurve.total_pnl >= 0 ? '+' : ''}{equityCurve.total_pnl.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}</span></span>
               <span className="text-gray-500">Max DD: <span className="text-loss">{equityCurve.max_drawdown_pct.toFixed(1)}%</span></span>
+              <a href="/api/reports/monthly-pdf?month=0" target="_blank" className="text-xs text-accent hover:text-blue-300 font-medium ml-2">PDF Report</a>
             </div>
           </div>
           <div className="relative h-52">

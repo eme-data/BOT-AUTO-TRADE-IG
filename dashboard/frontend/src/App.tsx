@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
+import { useAuth, useApiFetch } from './context/AuthContext'
 import BotStatusIndicator from './components/BotStatusIndicator'
+import OnboardingWizard from './components/OnboardingWizard'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Trades from './pages/Trades'
@@ -98,7 +99,7 @@ const configNav: NavItem[] = [
 ]
 
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { logout } = useAuth()
+  const { logout, isAdmin } = useAuth()
   const location = useLocation()
 
   const linkClass = (path: string, end?: boolean) => {
@@ -107,7 +108,10 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   }
 
   return (
-    <aside className={`fixed top-0 left-0 h-screen bg-bg-secondary border-r border-border flex flex-col z-40 transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'}`}>
+    <>
+    {/* Mobile overlay */}
+    {!collapsed && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={onToggle} />}
+    <aside className={`fixed top-0 left-0 h-screen bg-bg-secondary border-r border-border flex flex-col z-40 transition-all duration-200 ${collapsed ? 'w-16 max-md:-translate-x-full' : 'w-56'}`}>
       {/* Logo */}
       <div className="flex items-center gap-2 px-3 h-16 border-b border-border shrink-0">
         <AltiorLogo size={collapsed ? 32 : 36} className="text-white shrink-0" />
@@ -129,13 +133,17 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           </NavLink>
         ))}
 
-        <div className={`section-title px-3 mt-6 mb-2 ${collapsed ? 'sr-only' : ''}`}>Configuration</div>
-        {configNav.map((item) => (
-          <NavLink key={item.to} to={item.to} className={() => linkClass(item.to)} title={item.label}>
-            <span className="shrink-0">{item.icon}</span>
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
+        {isAdmin && (
+          <>
+            <div className={`section-title px-3 mt-6 mb-2 ${collapsed ? 'sr-only' : ''}`}>Configuration</div>
+            {configNav.map((item) => (
+              <NavLink key={item.to} to={item.to} className={() => linkClass(item.to)} title={item.label}>
+                <span className="shrink-0">{item.icon}</span>
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Footer */}
@@ -150,13 +158,17 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         </button>
       </div>
     </aside>
+    </>
   )
 }
 
-function TopBar() {
+function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   return (
-    <header className="h-14 bg-bg-secondary/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 sticky top-0 z-30">
-      <div />
+    <header className="h-14 bg-bg-secondary/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-6 sticky top-0 z-30">
+      <button onClick={onMenuToggle} className="md:hidden p-1.5 text-gray-400 hover:text-white">
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+      </button>
+      <div className="hidden md:block" />
       <div className="flex items-center gap-4">
         <BotStatusIndicator />
       </div>
@@ -165,8 +177,26 @@ function TopBar() {
 }
 
 function App() {
-  const { isAuthenticated, needsSetup } = useAuth()
-  const [collapsed, setCollapsed] = useState(false)
+  const { isAuthenticated, needsSetup, isAdmin } = useAuth()
+  const apiFetch = useApiFetch()
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768)
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (isAuthenticated && isAdmin) {
+      apiFetch('/api/settings/general').then(async (res) => {
+        if (res.ok) {
+          const data = await res.json()
+          const done = data.find((s: any) => s.key === 'onboarding_complete')
+          setOnboardingDone(done?.value === 'true')
+        } else {
+          setOnboardingDone(true) // assume done if settings not available
+        }
+      }).catch(() => setOnboardingDone(true))
+    } else {
+      setOnboardingDone(true)
+    }
+  }, [isAuthenticated, isAdmin])
 
   if (needsSetup === null) {
     return <div className="min-h-screen bg-bg-primary flex items-center justify-center text-gray-400">Loading...</div>
@@ -180,12 +210,16 @@ function App() {
     )
   }
 
+  if (isAdmin && onboardingDone === false) {
+    return <OnboardingWizard onComplete={() => setOnboardingDone(true)} />
+  }
+
   return (
     <div className="min-h-screen bg-bg-primary">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-      <div className={`transition-all duration-200 ${collapsed ? 'ml-16' : 'ml-56'}`}>
-        <TopBar />
-        <main className="p-6 max-w-[1400px] mx-auto animate-fade-in">
+      <div className={`transition-all duration-200 max-md:ml-0 ${collapsed ? 'ml-16' : 'ml-56'}`}>
+        <TopBar onMenuToggle={() => setCollapsed(!collapsed)} />
+        <main className="p-3 md:p-6 max-w-[1400px] mx-auto animate-fade-in">
           <Routes>
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/trades" element={<ProtectedRoute><Trades /></ProtectedRoute>} />

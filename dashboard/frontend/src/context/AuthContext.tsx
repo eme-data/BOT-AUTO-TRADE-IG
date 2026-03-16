@@ -8,9 +8,19 @@ interface AuthContextType {
   token: string | null
   isAuthenticated: boolean
   needsSetup: boolean | null
+  userRole: string
+  isAdmin: boolean
   login: (username: string, password: string, totpCode?: string) => Promise<LoginResult>
   setup: (username: string, password: string) => Promise<void>
   logout: () => void
+}
+
+function parseRole(token: string | null): string {
+  if (!token) return 'viewer'
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.role || 'admin'
+  } catch { return 'admin' }
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -18,6 +28,8 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
+  const userRole = parseRole(token)
+  const isAdmin = userRole === 'admin'
 
   useEffect(() => {
     checkStatus()
@@ -105,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         isAuthenticated: !!token,
         needsSetup,
+        userRole,
+        isAdmin,
         login,
         setup,
         logout,
