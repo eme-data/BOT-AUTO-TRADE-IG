@@ -652,14 +652,46 @@ class TradingBot:
         )
 
     async def _update_bars(self) -> None:
-        """Periodically fetch fresh bars from IG and run bar-based strategy evaluation."""
+        """Periodically fetch fresh bars from IG and run bar-based strategy evaluation.
+
+        Uses a bar cache to avoid exhausting IG API quota.  Bars are only
+        re-fetched from the API once per hour per epic; in between, the cached
+        DataFrame is reused for strategy evaluation.
+        """
+        now = datetime.utcnow()
+        if not hasattr(self, "_bar_cache"):
+            self._bar_cache: dict[str, tuple[datetime, pd.DataFrame]] = {}
+
         for strategy in self.registry.get_enabled():
             for epic in strategy.get_required_epics():
                 try:
                     resolution = strategy.get_required_resolution()
+                    cache_key = f"{epic}:{resolution}"
+
+                    # Check cache — only refetch every 60 minutes
+                    cached = self._bar_cache.get(cache_key)
+                    if cached:
+                        cached_at, cached_df = cached
+                        age_minutes = (now - cached_at).total_seconds() / 60
+                        if age_minutes < 60:
+                            # Reuse cached bars — still run strategy evaluation
+                            result = strategy.on_bar(epic, cached_df)
+                            if result and result.signal_type != "HOLD":
+                                SIGNALS_GENERATED.labels(strategy=strategy.name, signal_type=result.signal_type).inc()
+                                logger.info(
+                                    "bar_signal_cached",
+                                    epic=epic,
+                                    strategy=strategy.name,
+                                    signal=result.signal_type,
+                                    confidence=result.confidence,
+                                    reason=result.reason,
+                                )
+                                await self._process_signal(strategy.name, result)
+                            continue
+
                     num_bars = strategy.get_required_history()
 
-                    # Fetch fresh OHLCV data directly from IG API
+                    # Fetch fresh OHLCV data from IG API
                     bars = await self.broker.get_historical_prices(epic, resolution, num_bars)
                     if not bars or len(bars) < 30:
                         logger.debug("bar_update_insufficient", epic=epic, bars=len(bars) if bars else 0)
@@ -683,6 +715,11 @@ class TradingBot:
                     df.sort_index(inplace=True)
 
                     df = add_all_indicators(df)
+
+                    # Cache the processed DataFrame
+                    self._bar_cache[cache_key] = (now, df)
+                    logger.info("bar_update_fresh", epic=epic, resolution=resolution, bars=len(df))
+
                     result = strategy.on_bar(epic, df)
                     if result and result.signal_type != "HOLD":
                         SIGNALS_GENERATED.labels(strategy=strategy.name, signal_type=result.signal_type).inc()

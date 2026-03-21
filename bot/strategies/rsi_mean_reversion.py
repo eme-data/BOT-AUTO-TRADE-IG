@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 import pandas_ta as ta
 
@@ -31,6 +33,7 @@ class RSIMeanReversionStrategy(AbstractStrategy):
         merged = {**default_config, **(config or {})}
         super().__init__(name="rsi_mean_reversion", config=merged)
         self._last_rsi: dict[str, float] = {}
+        self._signal_cooldown: dict[str, float] = {}  # epic -> timestamp of last signal
 
     def on_tick(self, tick: Tick) -> SignalResult | None:
         # This strategy operates on bars, not ticks
@@ -64,30 +67,38 @@ class RSIMeanReversionStrategy(AbstractStrategy):
         size_factor = self.config.get("size_factor", 1.0)
         effective_size = round(self.config["size"] * size_factor, 2)
 
-        # BUY: RSI crosses above oversold AND price above EMA (uptrend)
-        if prev_rsi <= self.config["oversold"] < current_rsi and current_price > current_ema:
+        # Cooldown: max 1 signal per epic per 2 hours to avoid duplicates
+        cooldown_seconds = 7200
+        last_signal_time = self._signal_cooldown.get(epic, 0)
+        if time.time() - last_signal_time < cooldown_seconds:
+            return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)
+
+        # BUY: RSI below oversold (in zone or crossover) AND price above EMA
+        if current_rsi < self.config["oversold"] and current_price > current_ema:
+            self._signal_cooldown[epic] = time.time()
             return SignalResult(
                 signal_type="BUY",
                 epic=epic,
-                confidence=min(1.0, (self.config["oversold"] - prev_rsi + 10) / 30),
+                confidence=min(1.0, (self.config["oversold"] - current_rsi + 5) / 25),
                 stop_distance=self.config["stop_distance"],
                 limit_distance=self.config["limit_distance"],
                 size=effective_size,
                 indicators=indicators,
-                reason=f"RSI crossed above {self.config['oversold']} (was {prev_rsi:.1f}), price above EMA",
+                reason=f"RSI in oversold zone ({current_rsi:.1f} < {self.config['oversold']}), price above EMA",
             )
 
-        # SELL: RSI crosses below overbought AND price below EMA (downtrend)
-        if prev_rsi >= self.config["overbought"] > current_rsi and current_price < current_ema:
+        # SELL: RSI above overbought (in zone or crossover) AND price below EMA
+        if current_rsi > self.config["overbought"] and current_price < current_ema:
+            self._signal_cooldown[epic] = time.time()
             return SignalResult(
                 signal_type="SELL",
                 epic=epic,
-                confidence=min(1.0, (prev_rsi - self.config["overbought"] + 10) / 30),
+                confidence=min(1.0, (current_rsi - self.config["overbought"] + 5) / 25),
                 stop_distance=self.config["stop_distance"],
                 limit_distance=self.config["limit_distance"],
                 size=effective_size,
                 indicators=indicators,
-                reason=f"RSI crossed below {self.config['overbought']} (was {prev_rsi:.1f}), price below EMA",
+                reason=f"RSI in overbought zone ({current_rsi:.1f} > {self.config['overbought']}), price below EMA",
             )
 
         return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)
