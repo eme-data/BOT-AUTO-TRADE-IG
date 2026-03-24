@@ -34,7 +34,7 @@ class TradeRepository:
         await self.session.execute(
             update(Trade)
             .where(Trade.deal_id == deal_id)
-            .values(status="CLOSED", close_price=close_price, profit=profit, closed_at=datetime.now())
+            .values(status="CLOSED", close_price=close_price, profit=profit, closed_at=datetime.utcnow())
         )
         await self.session.commit()
 
@@ -103,7 +103,7 @@ class DailyPnLRepository:
         self.session = session
 
     async def get_today(self, account_id: str) -> DailyPnL | None:
-        today = datetime.now().date()
+        today = datetime.utcnow().date()
         result = await self.session.execute(
             select(DailyPnL).where(DailyPnL.date == today, DailyPnL.account_id == account_id)
         )

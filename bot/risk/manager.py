@@ -52,13 +52,13 @@ class RiskManager:
         self.config = config or RiskConfig()
         self.vix_monitor = VixMonitor(broker)
         self._daily_pnl: float = 0.0
-        self._daily_reset: datetime = datetime.now()
+        self._daily_reset: datetime = datetime.utcnow()
 
     async def validate_signal(self, signal: SignalResult) -> OrderRequest | None:
         """Validate a signal against risk rules. Returns OrderRequest if approved, None if rejected."""
 
         # Reset daily P&L counter at midnight
-        now = datetime.now()
+        now = datetime.utcnow()
         if now.date() > self._daily_reset.date():
             self._daily_pnl = 0.0
             self._daily_reset = now

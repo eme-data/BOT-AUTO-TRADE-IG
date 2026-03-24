@@ -177,7 +177,7 @@ class IGStreamClient:
                 epic=epic,
                 bid=float(bid),
                 offer=float(offer),
-                time=datetime.now(),
+                time=datetime.utcnow(),
             )
 
             self._last_tick_time = tick.time

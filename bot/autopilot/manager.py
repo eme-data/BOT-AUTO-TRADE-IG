@@ -131,8 +131,6 @@ class AutoPilotManager:
             await self._log_activity("INFO", f"Scored {len(scores)} markets, {len(qualified)} above threshold ({self.config.min_score_threshold:.0%})")
 
             # 4. Select top N markets (respecting max_active_markets)
-            current_open = len(self._active_strategies)
-            available_slots = max(0, self.config.max_active_markets - current_open)
             top_markets = qualified[:self.config.max_active_markets]
 
             # 5. Determine which strategies to add/remove

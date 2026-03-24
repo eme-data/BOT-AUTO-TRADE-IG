@@ -170,7 +170,7 @@ class TrailingStopManager:
                     ):
                         state.current_stop = be_stop
                         state.breakeven_activated = True
-                        state.last_updated = datetime.now()
+                        state.last_updated = datetime.utcnow()
                         updated = True
                         logger.info("trailing_stop_breakeven", deal_id=state.deal_id, epic=state.epic, stop=be_stop)
 
@@ -201,11 +201,11 @@ class TrailingStopManager:
                     updated = True
                 elif state.direction == Direction.BUY and new_stop > state.current_stop:
                     state.current_stop = new_stop
-                    state.last_updated = datetime.now()
+                    state.last_updated = datetime.utcnow()
                     updated = True
                 elif state.direction == Direction.SELL and new_stop < state.current_stop:
                     state.current_stop = new_stop
-                    state.last_updated = datetime.now()
+                    state.last_updated = datetime.utcnow()
                     updated = True
 
             if updated:
