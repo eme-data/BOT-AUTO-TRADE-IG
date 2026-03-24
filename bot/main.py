@@ -661,7 +661,12 @@ class TradingBot:
         if not hasattr(self, "_bar_cache"):
             self._bar_cache: dict[str, tuple[datetime, pd.DataFrame]] = {}
 
-        for strategy in self.registry.get_enabled():
+        enabled = self.registry.get_enabled()
+        all_epics = [e for s in enabled for e in s.get_required_epics()]
+        logger.info("bar_update_cycle", strategies=len(enabled), epics=len(all_epics),
+                     names=[s.name for s in enabled])
+
+        for strategy in enabled:
             for epic in strategy.get_required_epics():
                 try:
                     resolution = strategy.get_required_resolution()
