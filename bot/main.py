@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import json
 import logging
 import sys
@@ -122,10 +123,8 @@ class TradingBot:
 
     async def _publish_log(self, level: str, message: str, **extra) -> None:
         """Publish a log entry to Redis for the live logs page."""
-        import datetime
-
         entry = {
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "time": _dt.datetime.now(_dt.timezone.utc).isoformat(),
             "level": level,
             "message": message,
             **extra,
@@ -658,7 +657,7 @@ class TradingBot:
         re-fetched from the API once per hour per epic; in between, the cached
         DataFrame is reused for strategy evaluation.
         """
-        now = datetime.utcnow()
+        now = _dt.datetime.utcnow()
         if not hasattr(self, "_bar_cache"):
             self._bar_cache: dict[str, tuple[datetime, pd.DataFrame]] = {}
 
