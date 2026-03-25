@@ -82,8 +82,12 @@ class IGStreamClient:
         self._loop = asyncio.get_running_loop()
 
         if self._redis_url:
-            import redis.asyncio as aioredis
-            self._redis = aioredis.from_url(self._redis_url)
+            try:
+                import redis.asyncio as aioredis
+                self._redis = aioredis.from_url(self._redis_url)
+            except Exception as e:
+                logger.warning("stream_redis_init_failed", error=str(e))
+                self._redis = None
 
         self._stream = IGStreamService(self._ig)
         await self._loop.run_in_executor(
@@ -186,7 +190,7 @@ class IGStreamClient:
                 self._on_tick(tick)
 
             # Publish to Redis if available
-            if self._redis:
+            if self._redis and self._loop:
                 asyncio.run_coroutine_threadsafe(
                     self._publish_tick(tick), self._loop
                 )
@@ -200,7 +204,7 @@ class IGStreamClient:
             if self._on_trade:
                 self._on_trade(values)
 
-            if self._redis:
+            if self._redis and self._loop:
                 asyncio.run_coroutine_threadsafe(
                     self._publish_event("bot:trades", values), self._loop
                 )
@@ -214,7 +218,7 @@ class IGStreamClient:
             if self._on_account:
                 self._on_account(values)
 
-            if self._redis:
+            if self._redis and self._loop:
                 asyncio.run_coroutine_threadsafe(
                     self._publish_event("bot:account", values), self._loop
                 )
@@ -244,7 +248,7 @@ class IGStreamClient:
         """Check if the stream appears stale (no ticks for too long)."""
         if self._last_tick_time is None:
             return False
-        elapsed = (datetime.now() - self._last_tick_time).total_seconds()
+        elapsed = (datetime.utcnow() - self._last_tick_time).total_seconds()
         # If no ticks for 5 minutes during market hours, connection is probably stale
         return elapsed > 300
 

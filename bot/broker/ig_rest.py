@@ -65,14 +65,19 @@ class IGRestClient(BrokerClient):
 
     def __init__(self):
         self._ig: IGService | None = None
-        self._loop = asyncio.get_event_loop()
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._connected = False
         self._last_reconnect: float = 0  # timestamp of last reconnect
         self._reconnect_count: int = 0
 
-    def _run_sync(self, func, *args, **kwargs):
-        """Run a synchronous trading_ig call in a thread executor."""
-        return self._loop.run_in_executor(None, partial(func, *args, **kwargs))
+    async def _run_sync(self, func, *args, **kwargs):
+        """Run a synchronous trading_ig call in a thread executor with timeout."""
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
+        return await asyncio.wait_for(
+            self._loop.run_in_executor(None, partial(func, *args, **kwargs)),
+            timeout=30,  # 30s timeout to prevent hanging on IG API
+        )
 
     async def connect(self) -> None:
         self._ig = IGService(

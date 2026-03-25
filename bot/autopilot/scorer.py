@@ -21,6 +21,7 @@ class MarketScorer:
 
     def __init__(self, broker: IGRestClient):
         self.broker = broker
+        self._consecutive_errors = 0
 
     async def score_market(self, epic: str, instrument_name: str = "") -> MarketScore:
         """Fetch H1/H4/D1 data and compute composite score."""

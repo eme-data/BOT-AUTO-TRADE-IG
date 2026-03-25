@@ -103,6 +103,7 @@ class TradingBot:
         self._log_buffer: deque[dict] = deque(maxlen=500)
         self.autopilot: AutoPilotManager | None = None
         self.ai_analyzer = ClaudeAnalyzer()
+        self._bar_cache: dict[str, tuple] = {}  # {epic:resolution -> (datetime, DataFrame)}
 
     async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
@@ -658,8 +659,6 @@ class TradingBot:
         DataFrame is reused for strategy evaluation.
         """
         now = _dt.datetime.utcnow()
-        if not hasattr(self, "_bar_cache"):
-            self._bar_cache: dict[str, tuple[datetime, pd.DataFrame]] = {}
 
         enabled = self.registry.get_enabled()
         all_epics = [e for s in enabled for e in s.get_required_epics()]
