@@ -742,7 +742,20 @@ class TradingBot:
 
                     # Cache the processed DataFrame
                     self._bar_cache[cache_key] = (now, df)
-                    logger.info("bar_update_fresh", epic=epic, resolution=resolution, bars=len(df))
+                    # Diagnostic: log price range and ATR to debug zero-ATR issue
+                    last_row = df.iloc[-1]
+                    atr_val = last_row.get("ATRr_14", None) if "ATRr_14" in df.columns else None
+                    logger.info(
+                        "bar_update_fresh",
+                        epic=epic,
+                        resolution=resolution,
+                        bars=len(df),
+                        last_open=round(float(last_row["open"]), 5),
+                        last_high=round(float(last_row["high"]), 5),
+                        last_low=round(float(last_row["low"]), 5),
+                        last_close=round(float(last_row["close"]), 5),
+                        atr_14=round(float(atr_val), 6) if atr_val is not None and not pd.isna(atr_val) else "NaN",
+                    )
 
                     result = strategy.on_bar(epic, df)
                     if result and result.signal_type != "HOLD":
