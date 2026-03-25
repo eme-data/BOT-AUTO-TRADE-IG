@@ -13,7 +13,7 @@ class StrategySelector:
         size_factor = min(1.0, max(0.5, (score.total_score - 0.35) / 0.45 * 0.5 + 0.5))
         base = {
             "epics": [score.epic],
-            "resolution": "HOUR",
+            "resolution": "MINUTE_15",
             "score": score.total_score,
             "size_factor": round(size_factor, 2),
         }

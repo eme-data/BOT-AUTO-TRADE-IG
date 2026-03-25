@@ -686,12 +686,12 @@ class TradingBot:
                     resolution = strategy.get_required_resolution()
                     cache_key = f"{epic}:{resolution}"
 
-                    # Check cache — only refetch every 60 minutes
+                    # Check cache — refetch every 15 minutes (aligned with M15 bars)
                     cached = self._bar_cache.get(cache_key)
                     if cached:
                         cached_at, cached_df = cached
                         age_minutes = (now - cached_at).total_seconds() / 60
-                        if age_minutes < 60:
+                        if age_minutes < 15:
                             # Reuse cached bars — still run strategy evaluation
                             result = strategy.on_bar(epic, cached_df)
                             if result and result.signal_type != "HOLD":

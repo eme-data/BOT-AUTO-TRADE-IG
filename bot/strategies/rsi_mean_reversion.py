@@ -67,8 +67,8 @@ class RSIMeanReversionStrategy(AbstractStrategy):
         size_factor = self.config.get("size_factor", 1.0)
         effective_size = round(self.config["size"] * size_factor, 2)
 
-        # Cooldown: max 1 signal per epic per 2 hours to avoid duplicates
-        cooldown_seconds = 7200
+        # Cooldown: max 1 signal per epic per 30 minutes to avoid duplicates
+        cooldown_seconds = 1800
         last_signal_time = self._signal_cooldown.get(epic, 0)
         if time.time() - last_signal_time < cooldown_seconds:
             return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)
