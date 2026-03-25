@@ -286,8 +286,13 @@ class TradingBot:
 
     async def _init_autopilot(self) -> None:
         """Initialize autopilot if enabled in settings."""
+        logger.info("autopilot_init_check", enabled=settings.autopilot.enabled,
+                     scan_interval=settings.autopilot.scan_interval_minutes,
+                     max_markets=settings.autopilot.max_active_markets)
         if settings.autopilot.enabled:
             await self._enable_autopilot()
+        else:
+            logger.warning("autopilot_disabled_in_settings")
 
     async def _enable_autopilot(self) -> None:
         """Enable autopilot mode."""
