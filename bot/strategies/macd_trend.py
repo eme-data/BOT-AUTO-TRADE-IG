@@ -81,20 +81,9 @@ class MACDTrendStrategy(AbstractStrategy):
             "price": round(current_price, 5),
         }
 
-        # Convert ATR to IG points for stop/limit distance
-        # IG uses points (e.g., EUR/USD 1 pip = 1 point, Gold 1 point = 0.1)
-        # For FX pairs (price < 50), ATR in price needs to be converted to points
-        if current_price < 50:
-            # FX pair: ATR 0.003 = 30 points (multiply by 10000 for 4-decimal pairs)
-            atr_points = current_atr * 10000
-        elif current_price < 500:
-            # Indices like DAX: already in points
-            atr_points = current_atr
-        else:
-            # Gold, large indices: ATR is already roughly in points
-            atr_points = current_atr
-
-        stop_distance = max(10, round(atr_points * self.config["atr_multiplier"]))
+        # ATR is already in IG points (API returns scaled prices for M15/M5)
+        # Just apply the multiplier directly with a minimum floor
+        stop_distance = max(10, round(current_atr * self.config["atr_multiplier"]))
         limit_distance = round(stop_distance * self.config["limit_ratio"])
 
         # Apply score-based size factor from autopilot (defaults to 1.0)
