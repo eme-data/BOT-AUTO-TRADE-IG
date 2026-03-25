@@ -43,15 +43,15 @@ class AutoPilotManager:
         if not self.config.enabled:
             return
 
-        # Only scan during market hours: Mon-Fri 06:00-18:00 UTC
+        # Only scan during market hours: Mon-Fri 06:00-21:00 UTC
         now_utc = datetime.utcnow()
         if now_utc.weekday() >= 5:  # Saturday=5, Sunday=6
             await self._log_activity("INFO", "Skipping scan — weekend (markets closed)")
             return
-        if not (6 <= now_utc.hour < 18):
+        if not (6 <= now_utc.hour < 21):
             await self._log_activity(
                 "INFO",
-                f"Skipping scan — outside market hours (current: {now_utc.strftime('%H:%M')} UTC, active: 06:00-18:00)",
+                f"Skipping scan — outside market hours (current: {now_utc.strftime('%H:%M')} UTC, active: 06:00-21:00)",
             )
             return
 
