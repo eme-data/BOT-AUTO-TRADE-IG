@@ -240,9 +240,13 @@ class TradingBot:
         # Weekly report: every Sunday at 20:00 UTC
         self.scheduler.add_job(generate_weekly_report, "cron", day_of_week="sun", hour=20, minute=0, id="weekly_report")
         self.scheduler.start()
+        logger.info("scheduler_started", jobs=[j.id for j in self.scheduler.get_jobs()])
 
         # Initialize Auto-Pilot if enabled
-        await self._init_autopilot()
+        try:
+            await self._init_autopilot()
+        except Exception as e:
+            logger.error("autopilot_init_failed", error=str(e))
 
         self._running = True
         await self._publish_status("running")
@@ -658,6 +662,12 @@ class TradingBot:
         re-fetched from the API once per hour per epic; in between, the cached
         DataFrame is reused for strategy evaluation.
         """
+        try:
+            await self._update_bars_inner()
+        except Exception as e:
+            logger.error("bar_update_top_level_error", error=str(e))
+
+    async def _update_bars_inner(self) -> None:
         now = _dt.datetime.utcnow()
 
         enabled = self.registry.get_enabled()
