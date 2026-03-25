@@ -691,12 +691,33 @@ class TradingBot:
                                     reason=result.reason,
                                 )
                                 await self._process_signal(strategy.name, result)
+                            elif result:
+                                logger.debug(
+                                    "bar_hold_cached",
+                                    epic=epic,
+                                    strategy=strategy.name,
+                                    indicators=result.indicators,
+                                )
                             continue
 
                     num_bars = strategy.get_required_history()
 
                     # Fetch fresh OHLCV data from IG API
-                    bars = await self.broker.get_historical_prices(epic, resolution, num_bars)
+                    # If epic returns 404 (Mini variants), try standard CFD epic
+                    try:
+                        bars = await self.broker.get_historical_prices(epic, resolution, num_bars)
+                    except Exception as fetch_err:
+                        if "404" in str(fetch_err):
+                            # Try standard CFD variant: CS.D.EURUSD.CEFM.IP -> CS.D.EURUSD.CFD.IP
+                            parts = epic.split(".")
+                            if len(parts) >= 4:
+                                std_epic = f"{parts[0]}.{parts[1]}.{parts[2]}.CFD.IP"
+                                logger.warning("bar_fallback_standard", original=epic, fallback=std_epic)
+                                bars = await self.broker.get_historical_prices(std_epic, resolution, num_bars)
+                            else:
+                                raise
+                        else:
+                            raise
                     if not bars or len(bars) < 30:
                         logger.debug("bar_update_insufficient", epic=epic, bars=len(bars) if bars else 0)
                         continue
@@ -736,6 +757,13 @@ class TradingBot:
                             reason=result.reason,
                         )
                         await self._process_signal(strategy.name, result)
+                    elif result:
+                        logger.info(
+                            "bar_hold",
+                            epic=epic,
+                            strategy=strategy.name,
+                            indicators=result.indicators,
+                        )
 
                     # Rate limit: 2.5s between API calls
                     await asyncio.sleep(2.5)

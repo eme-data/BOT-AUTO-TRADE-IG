@@ -117,9 +117,12 @@ class MarketScanner:
 
         result: list[MarketInfo] = []
         for base, variants in groups.items():
-            # Prefer "Mini" variant (smaller deal size), otherwise first one
-            mini = [v for v in variants if "mini" in v.instrument_name.lower()]
-            chosen = mini[0] if mini else variants[0]
+            # Prefer standard CFD variants (Mini epics sometimes don't support
+            # historical prices API, causing 404 errors in bar fetching).
+            # Fall back to Mini only if no standard variant exists.
+            standard = [v for v in variants if "mini" not in v.instrument_name.lower()
+                        and "forward" not in v.instrument_name.lower()]
+            chosen = standard[0] if standard else variants[0]
             result.append(chosen)
             if len(variants) > 1:
                 logger.info("dedup_market", base=base, kept=chosen.epic, kept_name=chosen.instrument_name, dropped=[v.instrument_name for v in variants if v != chosen])
