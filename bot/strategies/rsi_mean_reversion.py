@@ -73,32 +73,42 @@ class RSIMeanReversionStrategy(AbstractStrategy):
         if time.time() - last_signal_time < cooldown_seconds:
             return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)
 
-        # BUY: RSI below oversold (in zone or crossover) AND price above EMA
-        if current_rsi < self.config["oversold"] and current_price > current_ema:
+        # EMA used as confidence boost, not as hard filter
+        ema_aligned_buy = current_price > current_ema
+        ema_aligned_sell = current_price < current_ema
+
+        # BUY: RSI below oversold
+        if current_rsi < self.config["oversold"]:
+            confidence = min(1.0, (self.config["oversold"] - current_rsi + 5) / 25)
+            if ema_aligned_buy:
+                confidence = min(1.0, confidence + 0.15)  # bonus if EMA confirms
             self._signal_cooldown[epic] = time.time()
             return SignalResult(
                 signal_type="BUY",
                 epic=epic,
-                confidence=min(1.0, (self.config["oversold"] - current_rsi + 5) / 25),
+                confidence=confidence,
                 stop_distance=self.config["stop_distance"],
                 limit_distance=self.config["limit_distance"],
                 size=effective_size,
                 indicators=indicators,
-                reason=f"RSI in oversold zone ({current_rsi:.1f} < {self.config['oversold']}), price above EMA",
+                reason=f"RSI oversold ({current_rsi:.1f} < {self.config['oversold']}), EMA {'aligned' if ema_aligned_buy else 'counter'}",
             )
 
-        # SELL: RSI above overbought (in zone or crossover) AND price below EMA
-        if current_rsi > self.config["overbought"] and current_price < current_ema:
+        # SELL: RSI above overbought
+        if current_rsi > self.config["overbought"]:
+            confidence = min(1.0, (current_rsi - self.config["overbought"] + 5) / 25)
+            if ema_aligned_sell:
+                confidence = min(1.0, confidence + 0.15)  # bonus if EMA confirms
             self._signal_cooldown[epic] = time.time()
             return SignalResult(
                 signal_type="SELL",
                 epic=epic,
-                confidence=min(1.0, (current_rsi - self.config["overbought"] + 5) / 25),
+                confidence=confidence,
                 stop_distance=self.config["stop_distance"],
                 limit_distance=self.config["limit_distance"],
                 size=effective_size,
                 indicators=indicators,
-                reason=f"RSI in overbought zone ({current_rsi:.1f} > {self.config['overbought']}), price below EMA",
+                reason=f"RSI overbought ({current_rsi:.1f} > {self.config['overbought']}), EMA {'aligned' if ema_aligned_sell else 'counter'}",
             )
 
         return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)

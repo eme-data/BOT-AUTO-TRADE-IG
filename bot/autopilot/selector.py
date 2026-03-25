@@ -35,20 +35,9 @@ class StrategySelector:
                 "limit_distance": 30,
             }
 
-        # Volatile regime: choose based on momentum characteristics
-        if score.momentum_score > 0.5 and score.direction_bias != "neutral":
-            return "macd_trend", {
-                **base,
-                "atr_multiplier": 1.5,
-                "limit_ratio": 2.0,
-            }
-
-        # Volatile but momentum fading or directionless → mean reversion
-        return "rsi_mean_reversion", {
+        # Volatile regime: use MACD (crossovers happen more often than RSI extremes)
+        return "macd_trend", {
             **base,
-            "oversold": 35,
-            "overbought": 65,
-            "ema_period": 50,
-            "stop_distance": 15,
-            "limit_distance": 30,
+            "atr_multiplier": 1.5,
+            "limit_ratio": 2.0,
         }
