@@ -675,6 +675,12 @@ class TradingBot:
     async def _update_bars_inner(self) -> None:
         now = _dt.datetime.utcnow()
 
+        # Skip if IG quota is exhausted (shared backoff with autopilot)
+        if not hasattr(self, "_bar_quota_backoff_until"):
+            self._bar_quota_backoff_until = None
+        if self._bar_quota_backoff_until and now < self._bar_quota_backoff_until:
+            return  # silently skip until backoff expires
+
         enabled = self.registry.get_enabled()
         all_epics = [e for s in enabled for e in s.get_required_epics()]
         logger.info("bar_update_cycle", strategies=len(enabled), epics=len(all_epics),
@@ -686,12 +692,13 @@ class TradingBot:
                     resolution = strategy.get_required_resolution()
                     cache_key = f"{epic}:{resolution}"
 
-                    # Check cache — refetch every 15 minutes (aligned with M15 bars)
+                    # Check cache — refetch every 60 minutes to conserve IG quota
+                    # Strategy evaluation still runs every 5 min on cached bars
                     cached = self._bar_cache.get(cache_key)
                     if cached:
                         cached_at, cached_df = cached
                         age_minutes = (now - cached_at).total_seconds() / 60
-                        if age_minutes < 15:
+                        if age_minutes < 60:
                             # Reuse cached bars — still run strategy evaluation
                             result = strategy.on_bar(epic, cached_df)
                             if result and result.signal_type != "HOLD":
@@ -796,6 +803,12 @@ class TradingBot:
                     await asyncio.sleep(2.5)
 
                 except Exception as e:
+                    err_str = str(e).lower()
+                    if "exceeded" in err_str or "allowance" in err_str:
+                        # Quota exhausted — stop all API calls for 3 hours
+                        self._bar_quota_backoff_until = now + _dt.timedelta(hours=3)
+                        logger.error("bar_quota_exhausted", epic=epic, backoff_until=self._bar_quota_backoff_until.strftime("%H:%M UTC"))
+                        return  # stop processing remaining epics
                     logger.error("bar_update_error", epic=epic, strategy=strategy.name, error=str(e))
 
     async def _reconcile_positions(self) -> None:
