@@ -185,6 +185,7 @@ class IGRestClient(BrokerClient):
             percentage_change=float(snap.get("percentageChange", 0)),
             market_status=snap.get("marketStatus", ""),
             min_deal_size=float(dealing.get("minDealSize", {}).get("value", 0)),
+            min_stop_distance=float(dealing.get("minNormalStopOrLimitDistance", {}).get("value", 0)),
             currency=inst.get("currencies", [{}])[0].get("code", "EUR") if inst.get("currencies") else "EUR",
             lot_size=float(inst.get("lotSize", 1)),
             scaling_factor=float(inst.get("scalingFactor", 1)),
@@ -343,16 +344,29 @@ class IGRestClient(BrokerClient):
 
     @auto_retry
     async def open_position(self, order: OrderRequest) -> OrderResult:
-        # Fetch market info to get correct currency and min size
+        # Fetch market info to get correct currency, min size, and min stop distance
         try:
             market = await self.get_market_info(order.epic)
             currency = market.currency
             min_size = market.min_deal_size or 0.5
             size = max(order.size, min_size)
+            min_stop = market.min_stop_distance or 0
+            logger.info("market_dealing_rules", epic=order.epic, currency=currency,
+                        min_size=min_size, min_stop=min_stop)
         except Exception as e:
             logger.warning("market_info_for_order_failed", epic=order.epic, error=str(e))
             currency = order.currency
-            size = max(order.size, 1.0)  # safe default
+            size = max(order.size, 1.0)
+            min_stop = 0
+
+        # Enforce minimum stop/limit distance from IG dealing rules
+        stop_dist = order.stop_distance
+        if stop_dist and min_stop > 0:
+            stop_dist = max(stop_dist, int(min_stop) + 1)  # +1 margin
+        limit_dist = order.limit_distance
+        if limit_dist and stop_dist and order.stop_distance:
+            # Scale limit proportionally if stop was bumped
+            limit_dist = round(limit_dist * stop_dist / order.stop_distance)
 
         # Use the REST API directly to avoid trading_ig argument issues
         payload = {
@@ -365,10 +379,10 @@ class IGRestClient(BrokerClient):
             "forceOpen": True,
             "guaranteedStop": False,
         }
-        if order.stop_distance:
-            payload["stopDistance"] = order.stop_distance
-        if order.limit_distance:
-            payload["limitDistance"] = order.limit_distance
+        if stop_dist:
+            payload["stopDistance"] = stop_dist
+        if limit_dist:
+            payload["limitDistance"] = limit_dist
 
         result = await self._run_sync(self._create_position_raw, payload)
         deal_ref = result.get("dealReference", "")

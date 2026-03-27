@@ -50,6 +50,7 @@ class MarketInfo:
     percentage_change: float
     market_status: str
     min_deal_size: float = 0.0
+    min_stop_distance: float = 0.0
     lot_size: float = 1.0
     currency: str = "EUR"
     scaling_factor: float = 1.0
