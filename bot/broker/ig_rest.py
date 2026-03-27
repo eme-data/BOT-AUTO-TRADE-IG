@@ -345,6 +345,7 @@ class IGRestClient(BrokerClient):
     @auto_retry
     async def open_position(self, order: OrderRequest) -> OrderResult:
         # Fetch market info to get correct currency, min size, and min stop distance
+        market = None
         try:
             market = await self.get_market_info(order.epic)
             currency = market.currency
@@ -352,7 +353,7 @@ class IGRestClient(BrokerClient):
             size = max(order.size, min_size)
             min_stop = market.min_stop_distance or 0
             logger.info("market_dealing_rules", epic=order.epic, currency=currency,
-                        min_size=min_size, min_stop=min_stop)
+                        min_size=min_size, min_stop=min_stop, expiry=market.expiry)
         except Exception as e:
             logger.warning("market_info_for_order_failed", epic=order.epic, error=str(e))
             currency = order.currency
@@ -369,12 +370,16 @@ class IGRestClient(BrokerClient):
             limit_dist = round(limit_dist * stop_dist / order.stop_distance)
 
         # Use the REST API directly to avoid trading_ig argument issues
+        # Use market expiry from dealing info, not hardcoded DFB (which = spread bet)
+        expiry = market.expiry if market else order.expiry
+        if expiry in ("DFB", None, ""):
+            expiry = "-"  # CFD default
         payload = {
             "epic": order.epic,
             "direction": order.direction.value,
             "size": str(size),
             "orderType": order.order_type.value,
-            "expiry": order.expiry,
+            "expiry": expiry,
             "currencyCode": currency,
             "forceOpen": True,
             "guaranteedStop": False,
