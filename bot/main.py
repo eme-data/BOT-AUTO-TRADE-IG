@@ -423,6 +423,13 @@ class TradingBot:
 
     async def _process_signal(self, strategy_name: str, signal) -> None:
         """Process a trading signal through risk management and execution."""
+        try:
+            await self._process_signal_inner(strategy_name, signal)
+        except Exception as e:
+            logger.error("process_signal_error", strategy=strategy_name, epic=signal.epic, error=str(e))
+
+    async def _process_signal_inner(self, strategy_name: str, signal) -> None:
+        logger.info("process_signal_start", strategy=strategy_name, epic=signal.epic, direction=signal.signal_type)
         # Check economic calendar
         if self.calendar.is_paused:
             ORDERS_REJECTED.labels(reason="calendar_pause").inc()
