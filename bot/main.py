@@ -424,7 +424,12 @@ class TradingBot:
     async def _process_signal(self, strategy_name: str, signal) -> None:
         """Process a trading signal through risk management and execution."""
         try:
-            await self._process_signal_inner(strategy_name, signal)
+            await asyncio.wait_for(
+                self._process_signal_inner(strategy_name, signal),
+                timeout=45,  # 45s max to prevent blocking the event loop
+            )
+        except asyncio.TimeoutError:
+            logger.error("process_signal_timeout", strategy=strategy_name, epic=signal.epic)
         except Exception as e:
             logger.error("process_signal_error", strategy=strategy_name, epic=signal.epic, error=str(e))
 
@@ -445,7 +450,10 @@ class TradingBot:
         order = await self.risk_manager.validate_signal(signal)
         if not order:
             ORDERS_REJECTED.labels(reason="risk_check").inc()
+            logger.info("process_signal_rejected_by_risk", strategy=strategy_name, epic=signal.epic)
             return
+        logger.info("process_signal_risk_approved", strategy=strategy_name, epic=signal.epic,
+                     size=order.size, stop=order.stop_distance, limit=order.limit_distance)
 
         # AI pre-trade validation
         if self.ai_analyzer.is_enabled:
