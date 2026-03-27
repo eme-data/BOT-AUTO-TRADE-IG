@@ -79,8 +79,18 @@ class MACDTrendStrategy(AbstractStrategy):
             "price": round(current_price, 5),
         }
 
-        # ATR-based stops with minimum floor
-        stop_distance = max(10, round(current_atr * self.config["atr_multiplier"]))
+        # ATR-based stops: convert to IG points if price is in real format
+        # IG M15 sometimes returns real prices (1.1525) vs scaled (11525)
+        atr_points = current_atr
+        if current_price < 50:
+            # FX pair in real price format: 0.0007 ATR → 7 points
+            atr_points = current_atr * 10000
+        elif current_price < 500:
+            # Small indices: multiply by 10
+            atr_points = current_atr * 10
+
+        # Minimum 20 points to avoid instant stop-outs
+        stop_distance = max(20, round(atr_points * self.config["atr_multiplier"]))
         limit_distance = round(stop_distance * self.config["limit_ratio"])
 
         size_factor = self.config.get("size_factor", 1.0)
