@@ -510,14 +510,19 @@ class TradingBot:
                 )
 
                 if ai_result.verdict == AIVerdict.REJECT:
-                    ORDERS_REJECTED.labels(reason="ai_rejected").inc()
+                    # Advisory mode: log the rejection but proceed with the trade
+                    logger.info(
+                        "ai_advisory_reject",
+                        epic=signal.epic,
+                        strategy=strategy_name,
+                        reasoning=ai_result.reasoning,
+                    )
                     await self._publish_log(
                         "WARNING",
-                        f"AI rejected: {ai_result.reasoning}",
+                        f"AI advises against trade (proceeding anyway): {ai_result.reasoning}",
                         strategy=strategy_name,
                         epic=signal.epic,
                     )
-                    return
 
                 if ai_result.verdict == AIVerdict.ADJUST:
                     adj = ai_result.suggested_adjustments
