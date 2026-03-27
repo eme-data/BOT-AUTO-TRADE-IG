@@ -336,6 +336,11 @@ class IGRestClient(BrokerClient):
             stop_distance=order.stop_distance,
             limit_distance=order.limit_distance,
             level=order.level,
+            limit_level=None,
+            quote_id=None,
+            stop_level=None,
+            trailing_stop=False,
+            trailing_stop_increment=None,
         )
         deal_ref = result.get("dealReference", "")
         logger.info("position_opened", epic=order.epic, direction=order.direction.value, size=order.size, deal_ref=deal_ref)
