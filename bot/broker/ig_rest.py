@@ -323,24 +323,39 @@ class IGRestClient(BrokerClient):
 
     @auto_retry
     async def open_position(self, order: OrderRequest) -> OrderResult:
+        # Build params — only include distance OR level, not both
+        params = {
+            "currency_code": order.currency,
+            "direction": order.direction.value,
+            "epic": order.epic,
+            "order_type": order.order_type.value,
+            "expiry": order.expiry,
+            "force_open": order.force_open,
+            "guaranteed_stop": order.guaranteed_stop,
+            "size": order.size,
+            "quote_id": None,
+            "trailing_stop": False,
+            "trailing_stop_increment": None,
+            "level": None,
+        }
+        # Use distance-based stops (not level-based)
+        if order.stop_distance:
+            params["stop_distance"] = order.stop_distance
+            params["stop_level"] = None
+        else:
+            params["stop_distance"] = None
+            params["stop_level"] = None
+
+        if order.limit_distance:
+            params["limit_distance"] = order.limit_distance
+            params["limit_level"] = None
+        else:
+            params["limit_distance"] = None
+            params["limit_level"] = None
+
         result = await self._run_sync(
             self._ig.create_open_position,
-            currency_code=order.currency,
-            direction=order.direction.value,
-            epic=order.epic,
-            order_type=order.order_type.value,
-            expiry=order.expiry,
-            force_open=order.force_open,
-            guaranteed_stop=order.guaranteed_stop,
-            size=order.size,
-            stop_distance=order.stop_distance,
-            limit_distance=order.limit_distance,
-            level=order.level,
-            limit_level=None,
-            quote_id=None,
-            stop_level=None,
-            trailing_stop=False,
-            trailing_stop_increment=None,
+            **params,
         )
         deal_ref = result.get("dealReference", "")
         logger.info("position_opened", epic=order.epic, direction=order.direction.value, size=order.size, deal_ref=deal_ref)
