@@ -359,7 +359,14 @@ class TradingBot:
             "rsi_mean_reversion": RSIMeanReversionStrategy,
             "macd_trend": MACDTrendStrategy,
         }
+        # Direct match first, then try extracting type from autopilot prefix
+        # e.g. "ap_macd_trend_CS_D_EURUSD_CEF_IP" → "macd_trend"
         cls = strategies.get(name)
+        if not cls:
+            for key in strategies:
+                if key in name:
+                    cls = strategies[key]
+                    break
         if cls:
             return cls(config)
         logger.warning("unknown_strategy", name=name)
