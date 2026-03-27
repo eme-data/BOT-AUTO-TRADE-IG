@@ -382,7 +382,8 @@ class IGRestClient(BrokerClient):
                 confirm = confirm.to_dict()
             elif not isinstance(confirm, dict):
                 confirm = dict(confirm) if confirm else {}
-            logger.info("deal_confirm", deal_ref=deal_ref, status=confirm.get("dealStatus"), deal_id=confirm.get("dealId"))
+            logger.info("deal_confirm", deal_ref=deal_ref, status=confirm.get("dealStatus"),
+                        deal_id=confirm.get("dealId"), reason=confirm.get("reason", ""))
         except Exception as e:
             logger.warning("deal_confirm_failed", deal_ref=deal_ref, error=str(e))
             confirm = {"dealStatus": "ACCEPTED", "dealId": deal_ref}
