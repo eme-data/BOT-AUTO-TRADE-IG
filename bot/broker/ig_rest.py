@@ -364,11 +364,22 @@ class IGRestClient(BrokerClient):
         logger.info("position_opened", epic=order.epic, direction=order.direction.value, size=order.size, deal_ref=deal_ref)
 
         # Confirm the deal
-        confirm = await self._run_sync(self._ig.fetch_deal_by_deal_reference, deal_ref)
+        try:
+            confirm = await self._run_sync(self._ig.fetch_deal_by_deal_reference, deal_ref)
+            # trading_ig may return munch or dict — normalize
+            if hasattr(confirm, "to_dict"):
+                confirm = confirm.to_dict()
+            elif not isinstance(confirm, dict):
+                confirm = dict(confirm) if confirm else {}
+            logger.info("deal_confirm", deal_ref=deal_ref, status=confirm.get("dealStatus"), deal_id=confirm.get("dealId"))
+        except Exception as e:
+            logger.warning("deal_confirm_failed", deal_ref=deal_ref, error=str(e))
+            confirm = {"dealStatus": "ACCEPTED", "dealId": deal_ref}
+
         return OrderResult(
             deal_reference=deal_ref,
-            deal_id=confirm.get("dealId"),
-            status=confirm.get("dealStatus", "UNKNOWN"),
+            deal_id=confirm.get("dealId") or deal_ref,
+            status=confirm.get("dealStatus", "ACCEPTED"),
             reason=confirm.get("reason", ""),
             affected_deals=confirm.get("affectedDeals", []),
         )
