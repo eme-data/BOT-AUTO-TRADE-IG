@@ -27,7 +27,8 @@ class MarketScorer:
         """Fetch H1/H4/D1 data and compute composite score."""
         scores_by_tf: dict[str, dict] = {}
 
-        for tf in ("HOUR", "DAY"):
+        # Only fetch DAY timeframe to conserve IG quota (1 API call per market)
+        for tf in ("DAY",):
             try:
                 bars = await self.broker.get_historical_prices(epic, tf, 50)
                 if len(bars) < 30:
@@ -47,7 +48,7 @@ class MarketScorer:
                 is_api_error = any(kw in err_str for kw in ("401", "security token", "session expired"))
                 logger.warning("score_tf_error", epic=epic, tf=tf, error=str(e), api_error=is_api_error)
                 if is_api_error:
-                    self._consecutive_errors = getattr(self, "_consecutive_errors", 0) + 1
+                    self._consecutive_errors += 1
                     if self._consecutive_errors >= 3:
                         logger.error("score_session_dead", errors=self._consecutive_errors)
                         raise

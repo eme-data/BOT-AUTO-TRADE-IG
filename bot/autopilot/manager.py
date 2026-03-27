@@ -76,9 +76,22 @@ class AutoPilotManager:
         await self._log_activity("INFO", "Scan cycle started")
 
         try:
-            # 1. Get candidate markets
-            async with async_session_factory() as session:
-                candidates = await self.scanner.get_candidates(self.config, session)
+            # 1. Get candidate markets (cache discovery results for 4 hours)
+            if not hasattr(self, "_discovery_cache") or not hasattr(self, "_discovery_cache_at"):
+                self._discovery_cache = None
+                self._discovery_cache_at = None
+
+            now_disc = datetime.utcnow()
+            if (self._discovery_cache
+                    and self._discovery_cache_at
+                    and (now_disc - self._discovery_cache_at).total_seconds() < 14400):
+                candidates = self._discovery_cache
+                logger.info("autopilot_discovery_cached", markets=len(candidates))
+            else:
+                async with async_session_factory() as session:
+                    candidates = await self.scanner.get_candidates(self.config, session)
+                self._discovery_cache = candidates
+                self._discovery_cache_at = now_disc
 
             if not candidates:
                 logger.info("autopilot_no_candidates")
