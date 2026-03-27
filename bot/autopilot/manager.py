@@ -11,6 +11,7 @@ from bot.autopilot.scanner import MarketScanner
 from bot.notifications import notify_autopilot_activation, notify_autopilot_scan
 from bot.autopilot.scorer import MarketScorer
 from bot.autopilot.selector import StrategySelector
+from bot.db.repository import StrategyStateRepository
 from bot.db.session import async_session_factory
 from bot.strategies.macd_trend import MACDTrendStrategy
 from bot.strategies.rsi_mean_reversion import RSIMeanReversionStrategy
@@ -210,6 +211,14 @@ class AutoPilotManager:
         score.is_active = True
         score.selected_strategy = strategy_type
 
+        # Persist to DB so strategies survive restart
+        try:
+            async with async_session_factory() as session:
+                repo = StrategyStateRepository(session)
+                await repo.upsert(registry_name, enabled=True, config=config)
+        except Exception as e:
+            logger.warning("autopilot_persist_error", error=str(e))
+
         # Subscribe to Lightstreamer stream for this epic (so ticks arrive)
         if self.stream:
             try:
@@ -237,6 +246,13 @@ class AutoPilotManager:
         registry_name = self._active_strategies.pop(epic, None)
         if registry_name:
             self.registry.unregister(registry_name)
+            # Remove from DB
+            try:
+                async with async_session_factory() as session:
+                    repo = StrategyStateRepository(session)
+                    await repo.upsert(registry_name, enabled=False)
+            except Exception as e:
+                logger.warning("autopilot_depersist_error", error=str(e))
             logger.info("autopilot_market_deactivated", epic=epic, strategy=registry_name)
             await self._log_activity("INFO", f"Deactivated {epic} ({registry_name})", epic=epic)
 
