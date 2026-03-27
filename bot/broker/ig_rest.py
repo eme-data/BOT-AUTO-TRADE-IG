@@ -343,21 +343,32 @@ class IGRestClient(BrokerClient):
 
     @auto_retry
     async def open_position(self, order: OrderRequest) -> OrderResult:
+        # Fetch market info to get correct currency and min size
+        try:
+            market = await self.get_market_info(order.epic)
+            currency = market.currency
+            min_size = market.min_deal_size or 0.5
+            size = max(order.size, min_size)
+        except Exception as e:
+            logger.warning("market_info_for_order_failed", epic=order.epic, error=str(e))
+            currency = order.currency
+            size = max(order.size, 1.0)  # safe default
+
         # Use the REST API directly to avoid trading_ig argument issues
         payload = {
             "epic": order.epic,
             "direction": order.direction.value,
-            "size": str(order.size),
+            "size": str(size),
             "orderType": order.order_type.value,
             "expiry": order.expiry,
-            "currencyCode": order.currency,
+            "currencyCode": currency,
             "forceOpen": True,
             "guaranteedStop": False,
         }
         if order.stop_distance:
-            payload["stopDistance"] = order.stop_distance  # number, not string
+            payload["stopDistance"] = order.stop_distance
         if order.limit_distance:
-            payload["limitDistance"] = order.limit_distance  # number, not string
+            payload["limitDistance"] = order.limit_distance
 
         result = await self._run_sync(self._create_position_raw, payload)
         deal_ref = result.get("dealReference", "")
