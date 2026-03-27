@@ -246,8 +246,12 @@ class IGRestClient(BrokerClient):
         old_version = session.headers.get("VERSION")
         session.headers["VERSION"] = "2"
         try:
+            logger.info("open_position_payload", payload=payload)
             response = session.post(f"{base_url}/positions/otc", json=payload)
-            response.raise_for_status()
+            if response.status_code >= 400:
+                body = response.text[:500]
+                logger.error("open_position_ig_error", status=response.status_code, body=body, payload=payload)
+                raise Exception(f"IG API {response.status_code}: {body}")
             return response.json()
         finally:
             if old_version:
