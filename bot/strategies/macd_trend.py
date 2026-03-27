@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 import pandas_ta as ta
 
@@ -11,8 +13,7 @@ class MACDTrendStrategy(AbstractStrategy):
     """
     MACD Trend Following Strategy.
 
-    Enters long when MACD line crosses above signal line (bullish crossover).
-    Enters short when MACD line crosses below signal line (bearish crossover).
+    Detects MACD crossovers in recent bars (lookback window handles cache lag).
     Uses ATR for dynamic stop-loss placement.
     """
 
@@ -27,10 +28,11 @@ class MACDTrendStrategy(AbstractStrategy):
             "resolution": "HOUR",
             "history_bars": 100,
             "size": 1.0,
-            "limit_ratio": 2.0,  # risk:reward ratio
+            "limit_ratio": 2.0,
         }
         merged = {**default_config, **(config or {})}
         super().__init__(name="macd_trend", config=merged)
+        self._signal_cooldown: dict[str, float] = {}
 
     def on_tick(self, tick: Tick) -> SignalResult | None:
         return None
@@ -66,32 +68,56 @@ class MACDTrendStrategy(AbstractStrategy):
         if atr is None or atr.empty:
             return None
 
-        current_macd = macd_line.iloc[-1]
-        prev_macd = macd_line.iloc[-2]
-        current_signal = signal_line.iloc[-1]
-        prev_signal = signal_line.iloc[-2]
         current_atr = atr.iloc[-1]
         current_price = df["close"].iloc[-1]
 
         indicators = {
-            "macd": round(current_macd, 6),
-            "signal": round(current_signal, 6),
+            "macd": round(macd_line.iloc[-1], 6),
+            "signal": round(signal_line.iloc[-1], 6),
             "histogram": round(histogram.iloc[-1], 6),
             "atr": round(current_atr, 6),
             "price": round(current_price, 5),
         }
 
-        # ATR is already in IG points (API returns scaled prices for M15/M5)
-        # Just apply the multiplier directly with a minimum floor
+        # ATR-based stops with minimum floor
         stop_distance = max(10, round(current_atr * self.config["atr_multiplier"]))
         limit_distance = round(stop_distance * self.config["limit_ratio"])
 
-        # Apply score-based size factor from autopilot (defaults to 1.0)
         size_factor = self.config.get("size_factor", 1.0)
         effective_size = round(self.config["size"] * size_factor, 2)
 
-        # Bullish crossover: MACD crosses above signal
-        if prev_macd <= prev_signal and current_macd > current_signal:
+        # Cooldown: 1 signal per epic per hour
+        cooldown_seconds = 3600
+        last_signal_time = self._signal_cooldown.get(epic, 0)
+        if time.time() - last_signal_time < cooldown_seconds:
+            return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)
+
+        # Scan last 8 bars for crossovers (covers ~2h of M15 data)
+        # This ensures we don't miss crossovers between hourly cache refreshes
+        lookback = min(8, len(macd_line) - 1)
+        signal_type = None
+        crossover_bar = None
+
+        for i in range(-lookback, 0):
+            prev_m = macd_line.iloc[i - 1]
+            curr_m = macd_line.iloc[i]
+            prev_s = signal_line.iloc[i - 1]
+            curr_s = signal_line.iloc[i]
+
+            if prev_m <= prev_s and curr_m > curr_s:
+                signal_type = "BUY"
+                crossover_bar = i
+            elif prev_m >= prev_s and curr_m < curr_s:
+                signal_type = "SELL"
+                crossover_bar = i
+
+        # Only trade if the most recent crossover still holds
+        # (MACD still on the same side as the crossover direction)
+        current_macd = macd_line.iloc[-1]
+        current_signal = signal_line.iloc[-1]
+
+        if signal_type == "BUY" and current_macd > current_signal:
+            self._signal_cooldown[epic] = time.time()
             return SignalResult(
                 signal_type="BUY",
                 epic=epic,
@@ -100,11 +126,11 @@ class MACDTrendStrategy(AbstractStrategy):
                 limit_distance=limit_distance,
                 size=effective_size,
                 indicators=indicators,
-                reason="MACD bullish crossover",
+                reason=f"MACD bullish crossover (bar {crossover_bar})",
             )
 
-        # Bearish crossover: MACD crosses below signal
-        if prev_macd >= prev_signal and current_macd < current_signal:
+        if signal_type == "SELL" and current_macd < current_signal:
+            self._signal_cooldown[epic] = time.time()
             return SignalResult(
                 signal_type="SELL",
                 epic=epic,
@@ -113,7 +139,7 @@ class MACDTrendStrategy(AbstractStrategy):
                 limit_distance=limit_distance,
                 size=effective_size,
                 indicators=indicators,
-                reason="MACD bearish crossover",
+                reason=f"MACD bearish crossover (bar {crossover_bar})",
             )
 
         return SignalResult(signal_type="HOLD", epic=epic, indicators=indicators)
