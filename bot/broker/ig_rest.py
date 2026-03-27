@@ -351,13 +351,13 @@ class IGRestClient(BrokerClient):
             "orderType": order.order_type.value,
             "expiry": order.expiry,
             "currencyCode": order.currency,
-            "forceOpen": order.force_open,
-            "guaranteedStop": order.guaranteed_stop,
+            "forceOpen": True,
+            "guaranteedStop": False,
         }
         if order.stop_distance:
-            payload["stopDistance"] = str(order.stop_distance)
+            payload["stopDistance"] = order.stop_distance  # number, not string
         if order.limit_distance:
-            payload["limitDistance"] = str(order.limit_distance)
+            payload["limitDistance"] = order.limit_distance  # number, not string
 
         result = await self._run_sync(self._create_position_raw, payload)
         deal_ref = result.get("dealReference", "")
