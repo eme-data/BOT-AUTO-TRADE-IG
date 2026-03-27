@@ -239,6 +239,22 @@ class IGRestClient(BrokerClient):
             else:
                 session.headers.pop("VERSION", None)
 
+    def _create_position_raw(self, payload: dict) -> dict:
+        """Create position via direct REST API call (bypasses trading_ig arg issues)."""
+        session = self._ig.session
+        base_url = self._ig.BASE_URL
+        old_version = session.headers.get("VERSION")
+        session.headers["VERSION"] = "2"
+        try:
+            response = session.post(f"{base_url}/positions/otc", json=payload)
+            response.raise_for_status()
+            return response.json()
+        finally:
+            if old_version:
+                session.headers["VERSION"] = old_version
+            else:
+                session.headers.pop("VERSION", None)
+
     @staticmethod
     def _parse_prices_json(prices: list[dict]) -> list[OHLCV]:
         """Parse raw JSON price data from IG REST API into OHLCV objects."""
@@ -323,40 +339,23 @@ class IGRestClient(BrokerClient):
 
     @auto_retry
     async def open_position(self, order: OrderRequest) -> OrderResult:
-        # Build params — only include distance OR level, not both
-        params = {
-            "currency_code": order.currency,
-            "direction": order.direction.value,
+        # Use the REST API directly to avoid trading_ig argument issues
+        payload = {
             "epic": order.epic,
-            "order_type": order.order_type.value,
+            "direction": order.direction.value,
+            "size": str(order.size),
+            "orderType": order.order_type.value,
             "expiry": order.expiry,
-            "force_open": order.force_open,
-            "guaranteed_stop": order.guaranteed_stop,
-            "size": order.size,
-            "quote_id": None,
-            "trailing_stop": False,
-            "trailing_stop_increment": None,
-            "level": None,
+            "currencyCode": order.currency,
+            "forceOpen": order.force_open,
+            "guaranteedStop": order.guaranteed_stop,
         }
-        # Use distance-based stops (not level-based)
         if order.stop_distance:
-            params["stop_distance"] = order.stop_distance
-            params["stop_level"] = None
-        else:
-            params["stop_distance"] = None
-            params["stop_level"] = None
-
+            payload["stopDistance"] = str(order.stop_distance)
         if order.limit_distance:
-            params["limit_distance"] = order.limit_distance
-            params["limit_level"] = None
-        else:
-            params["limit_distance"] = None
-            params["limit_level"] = None
+            payload["limitDistance"] = str(order.limit_distance)
 
-        result = await self._run_sync(
-            self._ig.create_open_position,
-            **params,
-        )
+        result = await self._run_sync(self._create_position_raw, payload)
         deal_ref = result.get("dealReference", "")
         logger.info("position_opened", epic=order.epic, direction=order.direction.value, size=order.size, deal_ref=deal_ref)
 
